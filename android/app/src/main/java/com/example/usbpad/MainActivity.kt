@@ -147,7 +147,11 @@ class MainActivity : Activity() {
             }
             runOnUiThread {
                 status.text = out.lines().takeLast(4).joinToString("\n")
-                if (action == "on" && out.contains("HID ON")) link.start()
+                if (action == "on" && out.contains("HID2 ON")) {
+                    val kbd = out.lines().firstOrNull { it.startsWith("KBD ") }?.substring(4)?.trim()
+                    val mouse = out.lines().firstOrNull { it.startsWith("MOUSE ") }?.substring(6)?.trim()
+                    if (kbd != null && mouse != null) link.start(kbd, mouse)
+                }
             }
         }
         t.isDaemon = true

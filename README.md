@@ -1,6 +1,6 @@
 # UsbPad HID — root দিয়ে ফোনকে USB keyboard + touchpad বানাও (Nothing Phone 1)
 
-PC-তে কিছু install করতে হয় না। ফোন নিজেই USB HID device হয়ে যায় (configfs gadget → /dev/hidg0)।
+PC-তে কিছু install করতে হয় না। ফোন নিজেই USB HID device হয়ে যায় (configfs gadget, দুটো HID function: keyboard = hid.usb0, mouse = hid.usb1)।
 
 ## দরকার
 - Root (KernelSU/Magisk), UsbPad HID app-কে root permission দিতে হবে।
@@ -8,7 +8,7 @@ PC-তে কিছু install করতে হয় না। ফোন নি
 
 ## চালানো
 1. APK install করো, app খোলো, root permission দাও।
-2. **HID ON** চাপো (~১০ সেকেন্ড)। "HID ON: /dev/hidg0 ready" আসবে।
+2. **HID ON** চাপো (~১০ সেকেন্ড)। "HID2 ON", `KBD /dev/hidgX`, `MOUSE /dev/hidgY` আসবে।
 3. Cable দিয়ে PC-তে লাগাও (সরাসরি port-এ, hub নয়)।
 4. উপরের লাইনে `sent=… dropped=… PC-LED-reports=…` দেখাবে।
 5. কাজ শেষে **HID OFF** চাপো। USB না ফিরলে `su -c "svc usb setFunctions mtp"`, না হলে reboot।

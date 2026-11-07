@@ -11,28 +11,30 @@ import java.io.InterruptedIOException;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Runs as root:  CLASSPATH=<apk> app_process /system/bin com.example.usbpad.HidHelper [/dev/hidg0]
+ * Runs as root:  CLASSPATH=<apk> app_process /system/bin com.example.usbpad.HidHelper /dev/hidgK /dev/hidgM
  * stdin : text commands (M dx dy | W d | D/U/C L|R|M | T text | K tap|down|up name | R)
  * stdout: "S <sent> <dropped> <host-led-reports>" every second, "E <msg>" on fatal error
  * Writes are NON-blocking: if the PC is not reading, reports are dropped instead of hanging.
- * Report 1 = keyboard (9 bytes: id,mods,0,k1..k6), report 2 = mouse (5 bytes: id,buttons,x,y,wheel)
+ * Two HID functions (no report ids): keyboard 8 bytes (mods,0,k1..k6), mouse 4 bytes (buttons,x,y,wheel)
  */
 public class HidHelper {
-    private static FileDescriptor fd;
+    private static final FileDescriptor[] fds = new FileDescriptor[2]; // 0 = keyboard, 1 = mouse
+    private static final boolean[] stalled = new boolean[2];
     private static int mods = 0;
     private static int buttons = 0;
     private static final int[] keys = new int[6];
     private static volatile long sent = 0;
     private static volatile long dropped = 0;
     private static volatile long leds = 0;
-    private static boolean stalled = false;
 
     public static void main(String[] args) throws Exception {
-        String dev = args.length > 0 ? args[0] : "/dev/hidg0";
+        String kdev = args.length > 0 ? args[0] : "/dev/hidg0";
+        String mdev = args.length > 1 ? args[1] : "/dev/hidg1";
         try {
-            fd = Os.open(dev, OsConstants.O_RDWR | OsConstants.O_NONBLOCK, 0);
+            fds[0] = Os.open(kdev, OsConstants.O_RDWR | OsConstants.O_NONBLOCK, 0);
+            fds[1] = Os.open(mdev, OsConstants.O_RDWR | OsConstants.O_NONBLOCK, 0);
         } catch (ErrnoException e) {
-            System.out.println("E cannot open " + dev + ": " + e.getMessage());
+            System.out.println("E cannot open " + kdev + " / " + mdev + ": " + e.getMessage());
             System.out.flush();
             System.exit(1);
         }
@@ -52,7 +54,7 @@ public class HidHelper {
             byte[] buf = new byte[16];
             while (true) {
                 try {
-                    int n = Os.read(fd, buf, 0, buf.length);
+                    int n = Os.read(fds[0], buf, 0, buf.length);
                     if (n > 0) leds++;
                 } catch (ErrnoException e) {
                     try { Thread.sleep(50); } catch (InterruptedException ie) { return; }
@@ -78,13 +80,13 @@ public class HidHelper {
     }
 
     // ---------- low level ----------
-    private static void write(byte[] r, boolean essential) {
-        int tries = essential ? (stalled ? 20 : 300) : (stalled ? 1 : 20);
+    private static void write(int dev, byte[] r, boolean essential) {
+        int tries = essential ? (stalled[dev] ? 20 : 300) : (stalled[dev] ? 1 : 20);
         for (int i = 0; i < tries; i++) {
             try {
-                Os.write(fd, r, 0, r.length);
+                Os.write(fds[dev], r, 0, r.length);
                 sent++;
-                stalled = false;
+                stalled[dev] = false;
                 return;
             } catch (ErrnoException e) {
                 if (e.errno != OsConstants.EAGAIN) {
@@ -97,21 +99,20 @@ public class HidHelper {
             }
         }
         dropped++;
-        stalled = true;
+        stalled[dev] = true;
     }
 
     private static void sendKbd(boolean essential) {
-        byte[] r = new byte[9];
-        r[0] = 1;
-        r[1] = (byte) mods;
-        r[2] = 0;
-        for (int i = 0; i < 6; i++) r[3 + i] = (byte) keys[i];
-        write(r, essential);
+        byte[] r = new byte[8];
+        r[0] = (byte) mods;
+        r[1] = 0;
+        for (int i = 0; i < 6; i++) r[2 + i] = (byte) keys[i];
+        write(0, r, essential);
     }
 
     private static void sendMouse(int dx, int dy, int wheel, boolean essential) {
-        byte[] r = {2, (byte) buttons, (byte) dx, (byte) dy, (byte) wheel};
-        write(r, essential);
+        byte[] r = {(byte) buttons, (byte) dx, (byte) dy, (byte) wheel};
+        write(1, r, essential);
     }
 
     private static void addKey(int u) {

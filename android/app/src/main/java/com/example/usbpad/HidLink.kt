@@ -12,14 +12,14 @@ class HidLink(private val ctx: Context, private val onStatus: (String, Boolean) 
     @Volatile private var running = false
     private var proc: Process? = null
 
-    fun start() {
+    fun start(kbd: String, mouse: String) {
         if (running) return
         running = true
         queue.clear()
         val t = Thread {
             try {
                 val apk = ctx.applicationInfo.sourceDir
-                val cmd = "CLASSPATH=$apk app_process /system/bin com.example.usbpad.HidHelper /dev/hidg0"
+                val cmd = "CLASSPATH=$apk app_process /system/bin com.example.usbpad.HidHelper $kbd $mouse"
                 val p = ProcessBuilder("su", "-c", cmd).redirectErrorStream(true).start()
                 proc = p
                 val reader = Thread {
