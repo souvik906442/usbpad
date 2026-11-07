@@ -2,6 +2,7 @@ package com.example.usbpad
 
 import android.app.Activity
 import android.content.Context
+import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
@@ -17,6 +18,12 @@ import android.widget.TextView
 
 class MainActivity : Activity() {
     private lateinit var link: HidLink
+    private var adbLink: Link? = null
+    private var mode = "hid"
+    private lateinit var prefs: SharedPreferences
+    private lateinit var modeBtn: Button
+    private lateinit var onBtn: Button
+    private lateinit var offBtn: Button
     private lateinit var status: TextView
     private lateinit var keyView: KeyCaptureView
     private val handler = Handler(Looper.getMainLooper())
@@ -51,11 +58,11 @@ class MainActivity : Activity() {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     styled(b, true)
-                    link.send("D $name")
+                    sendCmd("D $name")
                 }
                 MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
                     styled(b, false)
-                    link.send("U $name")
+                    sendCmd("U $name")
                 }
             }
             true
@@ -71,11 +78,11 @@ class MainActivity : Activity() {
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     styled(b, true)
-                    link.send("K tap $name")
+                    sendCmd("K tap $name")
                     if (repeat) {
                         val r = object : Runnable {
                             override fun run() {
-                                link.send("K tap $name")
+                                sendCmd("K tap $name")
                                 handler.postDelayed(this, 60)
                             }
                         }
@@ -100,11 +107,11 @@ class MainActivity : Activity() {
         b.text = label
         b.setOnClickListener {
             if (activeMods.remove(name)) {
-                link.send("K up $name")
+                sendCmd("K up $name")
                 styled(b, false)
             } else {
                 activeMods.add(name)
-                link.send("K down $name")
+                sendCmd("K down $name")
                 styled(b, true)
             }
         }
@@ -112,8 +119,39 @@ class MainActivity : Activity() {
         return b
     }
 
+    private fun sendCmd(line: String) {
+        if (mode == "adb") adbLink?.send(line) else link.send(line)
+    }
+
+    private fun showAdbStatus(ok: Boolean) {
+        status.text = if (ok) "● ADB connected" else "○ ADB: waiting for PC (run server.py, USB or Wireless debugging ON)"
+        status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
+    }
+
+    private fun setMode(m: String) {
+        mode = m
+        prefs.edit().putString("mode", m).apply()
+        val adb = m == "adb"
+        modeBtn.text = if (adb) "Mode: ADB" else "Mode: HID (root)"
+        onBtn.visibility = if (adb) View.GONE else View.VISIBLE
+        offBtn.visibility = if (adb) View.GONE else View.VISIBLE
+        if (adb) {
+            link.stop()
+            adbLink?.stop()
+            val l = Link { ok -> runOnUiThread { if (mode == "adb") showAdbStatus(ok) } }
+            adbLink = l
+            l.start()
+            showAdbStatus(false)
+        } else {
+            adbLink?.stop()
+            adbLink = null
+            status.text = "○ HID off. Tap HID ON, then plug the cable into the PC."
+            status.setTextColor(0xFFBBBBBB.toInt())
+        }
+    }
+
     private fun releaseAll() {
-        link.send("R")
+        sendCmd("R")
         activeMods.clear()
         for ((_, b) in modButtons) styled(b, false)
     }
@@ -161,6 +199,8 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        prefs = getSharedPreferences("usbpad", Context.MODE_PRIVATE)
+        mode = prefs.getString("mode", "hid") ?: "hid"
 
         status = TextView(this)
         status.textSize = 12f
@@ -168,15 +208,17 @@ class MainActivity : Activity() {
         status.text = "○ HID off. Tap HID ON, then plug the cable into the PC."
         status.setTextColor(0xFFBBBBBB.toInt())
 
-        link = HidLink(this) { text, ok -> runOnUiThread { showStatus(text, ok) } }
+        link = HidLink(this) { text, ok -> runOnUiThread { if (mode == "hid") showStatus(text, ok) } }
 
-        val pad = TouchpadView(this) { link.send(it) }
-        keyView = KeyCaptureView(this) { link.send(it) }
+        val pad = TouchpadView(this) { sendCmd(it) }
+        keyView = KeyCaptureView(this) { sendCmd(it) }
 
-        val onBtn = styled(Button(this))
+        onBtn = styled(Button(this))
+        modeBtn = styled(Button(this))
+        modeBtn.setOnClickListener { setMode(if (mode == "adb") "hid" else "adb") }
         onBtn.text = "HID ON"
         onBtn.setOnClickListener { runSetup("on") }
-        val offBtn = styled(Button(this))
+        offBtn = styled(Button(this))
         offBtn.text = "HID OFF"
         offBtn.setOnClickListener { runSetup("off") }
 
@@ -199,7 +241,7 @@ class MainActivity : Activity() {
         root.setPadding(dp(8), dp(8), dp(8), dp(8))
 
         root.addView(status)
-        root.addView(row(44, onBtn, offBtn))
+        root.addView(row(44, modeBtn, onBtn, offBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win")))
@@ -207,6 +249,7 @@ class MainActivity : Activity() {
         root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true)))
         root.addView(keyView, LinearLayout.LayoutParams(1, 1))
         setContentView(root)
+        setMode(mode)
     }
 
     override fun onPause() {
@@ -217,5 +260,6 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         link.stop()
+        adbLink?.stop()
     }
 }

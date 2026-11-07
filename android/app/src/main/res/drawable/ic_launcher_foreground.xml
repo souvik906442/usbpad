@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- touchpad -->
+    <path
+        android:fillColor="#FF1B2A44"
+        android:strokeColor="#FF26C6DA"
+        android:strokeWidth="2.5"
+        android:pathData="M36,26h36a6,6 0 0 1 6,6v28a6,6 0 0 1 -6,6h-36a6,6 0 0 1 -6,-6v-28a6,6 0 0 1 6,-6z" />
+    <!-- cursor -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M46,34L46,57L51.5,52L55,60.5L59,58.8L55.5,50.5L62.5,50.5Z" />
+    <!-- keys -->
+    <path
+        android:fillColor="#FF26C6DA"
+        android:pathData="M32.5,71h9a2.5,2.5 0 0 1 2.5,2.5v3a2.5,2.5 0 0 1 -2.5,2.5h-9a2.5,2.5 0 0 1 -2.5,-2.5v-3a2.5,2.5 0 0 1 2.5,-2.5z" />
+    <path
+        android:fillColor="#FF26C6DA"
+        android:pathData="M49.5,71h9a2.5,2.5 0 0 1 2.5,2.5v3a2.5,2.5 0 0 1 -2.5,2.5h-9a2.5,2.5 0 0 1 -2.5,-2.5v-3a2.5,2.5 0 0 1 2.5,-2.5z" />
+    <path
+        android:fillColor="#FF26C6DA"
+        android:pathData="M66.5,71h9a2.5,2.5 0 0 1 2.5,2.5v3a2.5,2.5 0 0 1 -2.5,2.5h-9a2.5,2.5 0 0 1 -2.5,-2.5v-3a2.5,2.5 0 0 1 2.5,-2.5z" />
+</vector>

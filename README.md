@@ -28,3 +28,20 @@ tap করে সাথে সাথে আবার touch করে সরা�
 - শুধু US-layout ASCII অক্ষর যায়। Bengali লেখা যাবে না।
 - BIOS-এ কাজ করবে না (boot-protocol keyboard নয়)।
 - আগের adb + server.py পথ (Link.kt, server/) আর ব্যবহার হয় না।
+
+## দুটো mode (app-এর উপরের "Mode" বোতামে বদলানো যায়)
+
+- **Mode: HID (root)** - root + kernel HID gadget। PC-তে কিছু চালাতে হয় না, login screen-এও কাজ করে।
+  "HID ON" চাপো, তারপর cable PC-তে লাগাও। শেষে "HID OFF"।
+- **Mode: ADB** - root লাগে না। PC-তে `server/server.py` চালাও (adb reverse নিজে লাগায়),
+  ফোনে USB debugging ON। Windows login/lock screen ও UAC-তে কাজ করে না।
+
+ADB mode-এ যেতে HID চালু থাকলে আগে "HID OFF" দাও (HID চলাকালীন ফোনে adb থাকে না)।
+শেষ ব্যবহৃত mode মনে থাকে।
+
+### ADB mode: cable ছাড়া (Wireless debugging, Android 11+)
+1. ফোন আর PC একই Wi-Fi-তে। ফোনে Developer options -> Wireless debugging ON।
+2. "Pair device with pairing code" -> PC-তে: `adb pair IP:PAIRPORT` (code দাও)।
+3. Wireless debugging-এর মূল পর্দায় দেখানো IP:PORT দিয়ে: `adb connect IP:PORT`
+4. `adb devices` -> `device` দেখালে `python server\server.py` চালাও।
+USB cable আর wireless একসাথে থাকলে adb "more than one device" বলে; একটা রাখো।

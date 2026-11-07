@@ -228,7 +228,7 @@ def main():
     srv.bind(("127.0.0.1", PORT))  # localhost only
     srv.listen(2)
     threading.Thread(target=adb_loop, daemon=True).start()
-    print("UsbPad server on 127.0.0.1:%d - plug in phone (USB debugging ON), open the app." % PORT)
+    print("UsbPad server on 127.0.0.1:%d - connect phone (USB or Wireless debugging), open the app." % PORT)
     while True:
         conn, _ = srv.accept()
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
