@@ -1,5 +1,8 @@
-"""UsbPad Windows server: phone -> (adb reverse) -> 127.0.0.1:5555 -> SendInput.
-Run:  python server.py     (run as Administrator to also control elevated windows)
+"""UsbPad Windows server: phone -> (adb reverse) -> 127.0.0.1:38555 -> SendInput.
+Run:  python server.py [usb|wifi|auto]   (run as Administrator to also control elevated windows)
+      usb  = use the phone on the USB cable (adb -d)
+      wifi = use the phone connected over Wireless debugging (adb -s <ip:port>)
+      auto = plain adb (default; fine when only one device is attached)
 Needs: Python 3, adb (platform-tools) in PATH, USB debugging ON on the phone.
 """
 import ctypes
@@ -11,7 +14,9 @@ import threading
 import time
 from ctypes import wintypes
 
-PORT = 5555
+# Not 5555: adb itself probes 127.0.0.1:5555 for emulators and would hit this server.
+PORT = 38555
+MODE = sys.argv[1].lower() if len(sys.argv) > 1 else "auto"
 
 if sys.platform != "win32":
     sys.exit("This server only runs on Windows.")
@@ -203,16 +208,40 @@ def client(conn):
         print("phone disconnected")
 
 
+def adb_target(flags):
+    """Returns the adb prefix for the chosen mode, or None if no matching device."""
+    if MODE == "usb":
+        return ["adb", "-d"]
+    if MODE == "wifi":
+        out = subprocess.run(["adb", "devices"], capture_output=True, text=True,
+                             timeout=8, creationflags=flags).stdout
+        for line in out.splitlines()[1:]:
+            parts = line.split()
+            if len(parts) >= 2 and parts[1] == "device" and (":" in parts[0] or "_adb-tls" in parts[0]):
+                return ["adb", "-s", parts[0]]
+        return None
+    return ["adb"]
+
+
 def adb_loop():
     flags = 0x08000000  # CREATE_NO_WINDOW
     warned = False
+    noted = False
     while True:
         try:
-            out = subprocess.run(["adb", "reverse", "--list"], capture_output=True,
-                                 text=True, timeout=8, creationflags=flags).stdout
-            if "tcp:%d" % PORT not in out:
-                subprocess.run(["adb", "reverse", "tcp:%d" % PORT, "tcp:%d" % PORT],
-                               capture_output=True, timeout=8, creationflags=flags)
+            tgt = adb_target(flags)
+            if tgt is None:
+                if not noted:
+                    print("wifi mode: no wireless device yet. Run: adb pair IP:PORT, then adb connect IP:PORT")
+                    noted = True
+            else:
+                noted = False
+                out = subprocess.run(tgt + ["reverse", "--list"], capture_output=True,
+                                     text=True, timeout=8, creationflags=flags).stdout
+                if "tcp:%d" % PORT not in out:
+                    r = subprocess.run(tgt + ["reverse", "tcp:%d" % PORT, "tcp:%d" % PORT],
+                                       capture_output=True, text=True, timeout=8, creationflags=flags)
+                    print("adb reverse:", (r.stdout + r.stderr).strip() or "ok")
         except FileNotFoundError:
             if not warned:
                 print("adb not found in PATH. Install platform-tools or run adb reverse manually.")
@@ -228,7 +257,7 @@ def main():
     srv.bind(("127.0.0.1", PORT))  # localhost only
     srv.listen(2)
     threading.Thread(target=adb_loop, daemon=True).start()
-    print("UsbPad server on 127.0.0.1:%d - connect phone (USB or Wireless debugging), open the app." % PORT)
+    print("UsbPad server on 127.0.0.1:%d (mode: %s) - connect phone (USB or Wireless debugging), open the app." % (PORT, MODE))
     while True:
         conn, _ = srv.accept()
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)

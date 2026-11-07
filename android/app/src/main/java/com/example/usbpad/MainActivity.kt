@@ -120,25 +120,31 @@ class MainActivity : Activity() {
     }
 
     private fun sendCmd(line: String) {
-        if (mode == "adb") adbLink?.send(line) else link.send(line)
+        if (mode != "hid") adbLink?.send(line) else link.send(line)
     }
 
     private fun showAdbStatus(ok: Boolean) {
-        status.text = if (ok) "● ADB connected" else "○ ADB: waiting for PC (run server.py, USB or Wireless debugging ON)"
+        val how = if (mode == "wifi") "Wireless debugging, run: python server.py wifi"
+                  else "USB debugging, run: python server.py usb"
+        status.text = if (ok) "● ADB connected" else "○ waiting for PC ($how)"
         status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
     }
 
     private fun setMode(m: String) {
         mode = m
         prefs.edit().putString("mode", m).apply()
-        val adb = m == "adb"
-        modeBtn.text = if (adb) "Mode: ADB" else "Mode: HID (root)"
+        val adb = m != "hid"
+        modeBtn.text = when (m) {
+            "usb" -> "Mode: ADB (USB)"
+            "wifi" -> "Mode: ADB (Wi-Fi)"
+            else -> "Mode: HID (root)"
+        }
         onBtn.visibility = if (adb) View.GONE else View.VISIBLE
         offBtn.visibility = if (adb) View.GONE else View.VISIBLE
         if (adb) {
             link.stop()
             adbLink?.stop()
-            val l = Link { ok -> runOnUiThread { if (mode == "adb") showAdbStatus(ok) } }
+            val l = Link { ok -> runOnUiThread { if (mode != "hid") showAdbStatus(ok) } }
             adbLink = l
             l.start()
             showAdbStatus(false)
@@ -201,6 +207,7 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         prefs = getSharedPreferences("usbpad", Context.MODE_PRIVATE)
         mode = prefs.getString("mode", "hid") ?: "hid"
+        if (mode == "adb") mode = "usb"
 
         status = TextView(this)
         status.textSize = 12f
@@ -215,7 +222,7 @@ class MainActivity : Activity() {
 
         onBtn = styled(Button(this))
         modeBtn = styled(Button(this))
-        modeBtn.setOnClickListener { setMode(if (mode == "adb") "hid" else "adb") }
+        modeBtn.setOnClickListener { setMode(when (mode) { "hid" -> "usb"; "usb" -> "wifi"; else -> "hid" }) }
         onBtn.text = "HID ON"
         onBtn.setOnClickListener { runSetup("on") }
         offBtn = styled(Button(this))

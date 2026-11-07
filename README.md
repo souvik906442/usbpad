@@ -45,3 +45,8 @@ ADB mode-এ যেতে HID চালু থাকলে আগে "HID OFF" �
 3. Wireless debugging-এর মূল পর্দায় দেখানো IP:PORT দিয়ে: `adb connect IP:PORT`
 4. `adb devices` -> `device` দেখালে `python server\server.py` চালাও।
 USB cable আর wireless একসাথে থাকলে adb "more than one device" বলে; একটা রাখো।
+
+## তিনটা mode (Mode বোতাম চাপলে ঘোরে: HID -> ADB (USB) -> ADB (Wi-Fi))
+- ADB (USB):  `python server.py usb`  - cable দিয়ে যুক্ত ফোন (adb -d)
+- ADB (Wi-Fi): `python server.py wifi` - Wireless debugging-এ যুক্ত ফোন; cable-ও লাগানো থাকলে অসুবিধা নেই
+- port এখন 38555 (5555 নয়: adb নিজেই 5555-এ emulator খুঁজতে ঢোকে)

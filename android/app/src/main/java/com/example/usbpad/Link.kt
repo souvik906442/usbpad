@@ -6,9 +6,9 @@ import java.net.Socket
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 
-const val PORT = 5555
+const val PORT = 38555
 
-/** Talks to server.py on the PC through `adb reverse tcp:5555 tcp:5555`. */
+/** Talks to server.py on the PC through `adb reverse tcp:38555 tcp:38555`. */
 class Link(private val onStatus: (Boolean) -> Unit) {
     private val queue = LinkedBlockingQueue<String>()
     @Volatile private var running = true
