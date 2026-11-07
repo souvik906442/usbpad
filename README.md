@@ -1,31 +1,30 @@
-# UsbPad — ফোনকে USB cable দিয়ে Windows PC-র touchpad + keyboard বানাও (root লাগে না)
+# UsbPad HID — root দিয়ে ফোনকে USB keyboard + touchpad বানাও (Nothing Phone 1)
 
-## PC-তে (একবার)
-1. Python 3 install করো।
-2. Android platform-tools (adb) install করে PATH-এ রাখো।
-3. ফোনে Developer options → USB debugging ON।
-4. `python server\server.py` চালাও (Admin হিসেবে চালালে elevated window-এও কাজ করবে)।
-   এটা নিজেই `adb reverse tcp:5555 tcp:5555` লাগিয়ে নেয়, cable খুলে আবার লাগালেও।
+PC-তে কিছু install করতে হয় না। ফোন নিজেই USB HID device হয়ে যায় (configfs gadget → /dev/hidg0)।
 
-## ফোনে
-- APK বানাও: repo GitHub-এ push করো → Actions → "Build APK" → artifact `usbpad-debug-apk`
-  (অথবা Android Studio-তে `android/` folder খুলে Run)।
-- `adb install app-debug.apk`, তারপর UsbPad খোলো। উপরে "● Connected" দেখালে ready।
+## দরকার
+- Root (KernelSU/Magisk), UsbPad HID app-কে root permission দিতে হবে।
+- Kernel-এ `CONFIG_USB_CONFIGFS_F_HID=y` (NP1-এ আছে)।
+
+## চালানো
+1. APK install করো, app খোলো, root permission দাও।
+2. **HID ON** চাপো (~১০ সেকেন্ড)। "HID ON: /dev/hidg0 ready" আসবে।
+3. Cable দিয়ে PC-তে লাগাও (সরাসরি port-এ, hub নয়)।
+4. উপরের লাইনে `sent=… dropped=… PC-LED-reports=…` দেখাবে।
+5. কাজ শেষে **HID OFF** চাপো। USB না ফিরলে `su -c "svc usb setFunctions mtp"`, না হলে reboot।
+
+HID চলাকালীন MTP/ADB থাকে না।
 
 ## Gesture
-| কাজ | কীভাবে |
-|---|---|
-| Mouse move | এক আঙুল সরাও |
-| Left click | এক আঙুলে tap |
-| Right click | দুই আঙুলে tap |
-| Scroll | দুই আঙুল উপর/নিচ |
-| Drag | tap করে সাথে সাথে আবার touch করে সরাও |
-| Ctrl/Alt/Shift/Win | button চাপলে latch হয়, আবার চাপলে ছাড়ে (Ctrl + Keyboard-এ `c` = copy) |
+এক আঙুল = move, tap = left click, দুই আঙুলে tap = right click, দুই আঙুল উপর/নিচ = scroll,
+tap করে সাথে সাথে আবার touch করে সরালে = drag।
 
-## Protocol (server.py)
-`M dx dy`, `W delta`, `D|U|C L|R|M`, `T text`, `K tap|down|up name`, `R`
+## বুঝবে কীভাবে PC পড়ছে
+- `sent` বাড়ে আর `dropped` 0 থাকে = PC report নিচ্ছে।
+- `dropped` বাড়ে = PC report পড়ছে না (ফোন hang হয় না, report ফেলে দেয়)।
+- PC-র keyboard-এ Caps Lock চাপলে `PC-LED-reports` বাড়লে Windows-এর driver ফোনের সাথে কথা বলছে।
 
 ## সীমাবদ্ধতা
-- Windows lock/login screen বা UAC prompt-এ কাজ করবে না (এজন্যই পরে root HID gadget)।
-- Sensitivity/scroll speed বদলাতে `TouchpadView.kt`-এর `sensitivity` আর `scrollStep`।
-- Scroll উল্টো লাগলে `W ${steps * 120}`-এর চিহ্ন উল্টে দাও।
+- শুধু US-layout ASCII অক্ষর যায়। Bengali লেখা যাবে না।
+- BIOS-এ কাজ করবে না (boot-protocol keyboard নয়)।
+- আগের adb + server.py পথ (Link.kt, server/) আর ব্যবহার হয় না।

@@ -16,7 +16,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 class MainActivity : Activity() {
-    private lateinit var link: Link
+    private lateinit var link: HidLink
     private lateinit var status: TextView
     private lateinit var keyView: KeyCaptureView
     private val handler = Handler(Looper.getMainLooper())
@@ -47,7 +47,7 @@ class MainActivity : Activity() {
     private fun holdButton(label: String, name: String): Button {
         val b = styled(Button(this))
         b.text = label
-        b.setOnTouchListener { v, ev ->
+        b.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     styled(b, true)
@@ -67,7 +67,7 @@ class MainActivity : Activity() {
         val b = styled(Button(this))
         b.text = label
         var task: Runnable? = null
-        b.setOnTouchListener { v, ev ->
+        b.setOnTouchListener { _, ev ->
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {
                     styled(b, true)
@@ -118,9 +118,40 @@ class MainActivity : Activity() {
         for ((_, b) in modButtons) styled(b, false)
     }
 
-    private fun setStatus(ok: Boolean) {
-        status.text = if (ok) "● Connected" else "○ Waiting for PC (run server.py, USB debugging ON)"
-        status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
+    private fun showStatus(text: String, ok: Boolean) {
+        if (text.startsWith("S ")) {
+            val p = text.split(" ")
+            val sent = p.getOrElse(1) { "0" }
+            val dropped = p.getOrElse(2) { "0" }
+            val leds = p.getOrElse(3) { "0" }
+            status.text = "● HID  sent=$sent  dropped=$dropped  PC-LED-reports=$leds"
+            status.setTextColor(if (dropped == "0") 0xFF66BB6A.toInt() else 0xFFFFB74D.toInt())
+        } else {
+            status.text = text
+            status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
+        }
+    }
+
+    private fun runSetup(action: String) {
+        status.text = "hid.sh $action ... (may take ~10 s)"
+        status.setTextColor(0xFFBBBBBB.toInt())
+        val t = Thread {
+            if (action == "off") {
+                link.stop()
+                try { Thread.sleep(800) } catch (e: Exception) { }
+            }
+            val out = try {
+                HidSetup.run(this, action)
+            } catch (e: Exception) {
+                "error: " + e.message
+            }
+            runOnUiThread {
+                status.text = out.lines().takeLast(4).joinToString("\n")
+                if (action == "on" && out.contains("HID ON")) link.start()
+            }
+        }
+        t.isDaemon = true
+        t.start()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -128,15 +159,22 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         status = TextView(this)
-        status.textSize = 13f
+        status.textSize = 12f
         status.setPadding(dp(4), dp(2), dp(4), dp(6))
-        status.text = "○ Starting..."
+        status.text = "○ HID off. Tap HID ON, then plug the cable into the PC."
         status.setTextColor(0xFFBBBBBB.toInt())
 
-        link = Link { ok -> runOnUiThread { setStatus(ok) } }
+        link = HidLink(this) { text, ok -> runOnUiThread { showStatus(text, ok) } }
 
         val pad = TouchpadView(this) { link.send(it) }
         keyView = KeyCaptureView(this) { link.send(it) }
+
+        val onBtn = styled(Button(this))
+        onBtn.text = "HID ON"
+        onBtn.setOnClickListener { runSetup("on") }
+        val offBtn = styled(Button(this))
+        offBtn.text = "HID OFF"
+        offBtn.setOnClickListener { runSetup("off") }
 
         val kbBtn = styled(Button(this))
         kbBtn.text = "⌨ Keyboard"
@@ -157,6 +195,7 @@ class MainActivity : Activity() {
         root.setPadding(dp(8), dp(8), dp(8), dp(8))
 
         root.addView(status)
+        root.addView(row(44, onBtn, offBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win")))
@@ -164,8 +203,6 @@ class MainActivity : Activity() {
         root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true)))
         root.addView(keyView, LinearLayout.LayoutParams(1, 1))
         setContentView(root)
-
-        link.start()
     }
 
     override fun onPause() {
