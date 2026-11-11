@@ -58,7 +58,8 @@ setdesc() {
   if [ "$IS_T225" = 1 ]; then
     printf "$2" > "$TMPD/hid_desc.bin" || return 1
     cat "$TMPD/hid_desc.bin" > "$1/report_desc" || return 1
-    a=$(wc -c < "$TMPD/hid_desc.bin"); b=$(wc -c < "$1/report_desc")
+    # read back through a pipe: configfs files report st_size 4096, so "wc -c < file" would say 4096
+    a=$(wc -c < "$TMPD/hid_desc.bin"); b=$(cat "$1/report_desc" | wc -c)
     rm -f "$TMPD/hid_desc.bin"
     [ "$a" = "$b" ] || { echo "report_desc mismatch: wrote $a bytes, kernel has $b"; return 1; }
   else
