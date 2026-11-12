@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# hid.sh on|off|status|test   (run as root)
+# hid.sh on [PID]|off|status|test   (run as root)
 # Standard layout used by most Linux HID gadgets (works with Windows):
 #   hid.usb0 = boot keyboard, 8-byte reports, no report id
 #   hid.usb1 = boot mouse,    4-byte reports (buttons,x,y,wheel), no report id
@@ -22,6 +22,7 @@ UDCDIR=${UDCDIR:-/sys/class/udc}
 TMPD=${TMPD:-/data/local/tmp}
 K=$G/functions/hid.usb0
 M=$G/functions/hid.usb1
+PID=${2:-0x0108}   # optional: sh hid.sh on 0x0a09
 KDESC='\005\001\011\006\241\001\005\007\031\340\051\347\025\000\045\001\165\001\225\010\201\002\225\001\165\010\201\003\225\005\165\001\005\010\031\001\051\005\221\002\225\001\165\003\221\003\225\006\165\010\025\000\045\145\005\007\031\000\051\145\201\000\300'
 MDESC='\005\001\011\002\241\001\011\001\241\000\005\011\031\001\051\003\025\000\045\001\225\003\165\001\201\002\225\001\165\005\201\003\005\001\011\060\011\061\011\070\025\201\045\177\165\010\225\003\201\006\300\300'
 
@@ -93,7 +94,7 @@ on() {
   ln -s "$K" "$C/hid1" || die "link keyboard failed"
   ln -s "$M" "$C/hid2" || die "link mouse failed"
   echo 0x1d6b > "$G/idVendor"
-  echo 0x0108 > "$G/idProduct"      # new product id: Windows forgets old cached state
+  echo "$PID" > "$G/idProduct"      # new product id: Windows forgets old cached state
   echo 0 > "$G/bDeviceClass"; echo 0 > "$G/bDeviceSubClass"; echo 0 > "$G/bDeviceProtocol"
   echo 0x80 > "$C/bmAttributes" 2>/dev/null   # bus powered, no remote wakeup -> no selective suspend
   sleep 1
@@ -115,6 +116,13 @@ on() {
 }
 
 off() {
+  if [ "$IS_T225" = 1 ]; then
+    # unlinking HID functions while a process still has /dev/hidg* open can crash this kernel:
+    # give the app's helper up to 10 s to exit, then refuse.
+    n=0
+    while [ "$(hid_open_count)" != "0" ] && [ $n -lt 10 ]; do sleep 1; n=$((n + 1)); done
+    [ "$(hid_open_count)" = "0" ] || die "a process still has /dev/hidg* open (the app's helper?). Close the app, then run off again."
+  fi
   echo "" > "$G/UDC"
   unlinkall
   if [ "$IS_T225" = 1 ]; then
@@ -160,5 +168,5 @@ case "$1" in
     ls -l "$C" | grep -- '->'
     nodes; echo "KBD $KBD  MOUSE $MOUSE"
     echo "bmAttributes: $(cat "$C/bmAttributes" 2>/dev/null)  MaxPower: $(cat "$C/MaxPower" 2>/dev/null)" ;;
-  *) echo "usage: sh hid.sh on|off|status|test" ;;
+  *) echo "usage: sh hid.sh on [PID] | off | status | test" ;;
 esac
