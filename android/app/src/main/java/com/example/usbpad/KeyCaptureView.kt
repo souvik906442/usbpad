@@ -20,7 +20,7 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
     override fun onCheckIsTextEditor(): Boolean = true
 
     /** 0 = Off (live typing, non-ASCII dropped), 1 = Alt+hex Unicode codes (PC needs EnableHexNumpad), 2 = InScript keys. */
-    var bnMode = 1
+    var bnMode = 0
     /** true (ADB mode): the PC server types real Unicode, so send the text untouched. */
     var native = false
 

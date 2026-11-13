@@ -40,7 +40,6 @@ class MainActivity : Activity() {
     private val activeMods = mutableSetOf<String>()
     private val modButtons = mutableMapOf<String, Button>()
     private var kbVisible = false
-    private lateinit var bnBtn: Button
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -258,7 +257,6 @@ class MainActivity : Activity() {
         prefs.edit().putString("mode", m).apply()
         val adb = m == "usb" || m == "wifi"
         keyView.native = adb
-        updateBnBtn()
         val bt = m == "bt"
         modeBtn.text = when (m) {
             "usb" -> "Mode: ADB (USB)"
@@ -363,13 +361,6 @@ class MainActivity : Activity() {
 
         val pad = TouchpadView(this) { sendCmd(it) }
         keyView = KeyCaptureView(this) { sendCmd(it) }
-        keyView.bnMode = prefs.getInt("bn_mode", 1)
-        bnBtn = styled(Button(this))
-        bnBtn.setOnClickListener {
-            keyView.bnMode = (keyView.bnMode + 1) % 3
-            prefs.edit().putInt("bn_mode", keyView.bnMode).apply()
-            updateBnBtn()
-        }
 
         onBtn = styled(Button(this))
         modeBtn = styled(Button(this))
@@ -422,21 +413,12 @@ class MainActivity : Activity() {
             navBtn("▣ Recents") { nav("recents") }, padBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
-        root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), bnBtn))
+        root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), keyButton("Caps", "capslock")))
         root.addView(row(48, keyButton("Esc", "esc"), keyButton("Tab", "tab"), keyButton("Del", "delete", true), keyButton("⌫", "backspace", true), keyButton("Enter", "enter")))
-        root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true)))
+        root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true), keyButton("Num", "numlock")))
         root.addView(keyView, LinearLayout.LayoutParams(1, 1))
         setContentView(root)
         setMode(mode)
-    }
-
-    private fun updateBnBtn() {
-        bnBtn.text = when {
-            keyView.native -> "Bn: Unicode"
-            keyView.bnMode == 1 -> "Bn: Alt-hex"
-            keyView.bnMode == 2 -> "Bn: InScript"
-            else -> "Bn: Off"
-        }
     }
 
     override fun onResume() {

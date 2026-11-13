@@ -452,6 +452,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
         "enter" -> 40; "esc" -> 41; "backspace" -> 42; "tab" -> 43; "space" -> 44
         "delete" -> 76; "home" -> 74; "end" -> 77; "pgup" -> 75; "pgdn" -> 78
         "right" -> 79; "left" -> 80; "down" -> 81; "up" -> 82
+        "capslock" -> 57; "numlock" -> 83
         else -> {
             val f = if (n.length >= 2 && n[0] == 'f') n.substring(1).toIntOrNull() else null
             if (f != null && f in 1..12) 57 + f else 0
