@@ -23,6 +23,7 @@ import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 
 class MainActivity : Activity() {
     private lateinit var link: HidLink
@@ -385,6 +386,24 @@ class MainActivity : Activity() {
             kbVisible = !kbVisible
         }
 
+        fun navBtn(label: String, act: () -> Unit): Button {
+            val b = styled(Button(this))
+            b.text = label
+            b.setOnClickListener { act() }
+            return b
+        }
+        val padBtn = navBtn("Gamepad") {
+            if (mode == "bt") startActivity(Intent(this, GamepadActivity::class.java))
+            else Toast.makeText(this, "Gamepad works in Mode: Bluetooth", Toast.LENGTH_SHORT).show()
+        }
+
+        val navModeBtn = styled(Button(this))
+        navModeBtn.text = Nav.label(this)
+        navModeBtn.setOnClickListener {
+            Nav.cycle(this)
+            navModeBtn.text = Nav.label(this)
+        }
+
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.setBackgroundColor(0xFF111111.toInt())
@@ -392,6 +411,8 @@ class MainActivity : Activity() {
 
         root.addView(status)
         root.addView(row(44, modeBtn, onBtn, offBtn))
+        root.addView(row(40, navBtn("◀ Back") { Nav.back(this) }, navBtn("● Home") { Nav.home(this) },
+            navBtn("▣ Recents") { Nav.recents(this) }, navModeBtn, padBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), bnBtn))
@@ -408,6 +429,14 @@ class MainActivity : Activity() {
             keyView.bnMode == 1 -> "Bn: Alt-hex"
             keyView.bnMode == 2 -> "Bn: InScript"
             else -> "Bn: Off"
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (mode == "bt" && btLink != null) {
+            BtHolder.listener = { text, ok -> runOnUiThread { if (mode == "bt") showBtStatus(text, ok) } }
+            if (BtHolder.lastText.isNotEmpty()) showBtStatus(BtHolder.lastText, BtHolder.lastOk)
         }
     }
 

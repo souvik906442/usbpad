@@ -25,6 +25,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
     companion object {
         private const val ID_KBD = 1
         private const val ID_MOUSE = 2
+        private const val ID_PAD = 3
 
         // Report ID 1: keyboard (8 bytes: mods, reserved, 6 keys) + LED output report
         // Report ID 2: mouse (3 buttons, x, y, wheel)
@@ -45,7 +46,18 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             0x95, 0x01, 0x75, 0x05, 0x81, 0x01,
             0x05, 0x01, 0x09, 0x30, 0x09, 0x31, 0x09, 0x38,
             0x15, 0x81, 0x25, 0x7F, 0x75, 0x08, 0x95, 0x03, 0x81, 0x06,
-            0xC0, 0xC0
+            0xC0, 0xC0,
+            // Report ID 3: gamepad = 16 buttons, hat, X Y (left stick), Z Rz (right stick), Rx Ry (triggers) -> 9 bytes
+            0x05, 0x01, 0x09, 0x05, 0xA1, 0x01, 0x85, ID_PAD,
+            0x05, 0x09, 0x19, 0x01, 0x29, 0x10, 0x15, 0x00, 0x25, 0x01,
+            0x75, 0x01, 0x95, 0x10, 0x81, 0x02,
+            0x05, 0x01, 0x09, 0x39, 0x15, 0x00, 0x25, 0x07, 0x35, 0x00, 0x46, 0x3B, 0x01, 0x65, 0x14,
+            0x75, 0x04, 0x95, 0x01, 0x81, 0x42,
+            0x65, 0x00, 0x75, 0x04, 0x95, 0x01, 0x81, 0x03,
+            0x05, 0x01, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x35, 0x00, 0x45, 0x00, 0x75, 0x08, 0x95, 0x04,
+            0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35, 0x81, 0x02,
+            0x95, 0x02, 0x09, 0x33, 0x09, 0x34, 0x81, 0x02,
+            0xC0
         ).map { it.toByte() }.toByteArray()
 
         private const val PLAIN = "-=[]\\;'`,./"
@@ -200,7 +212,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
         override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
             val h = hid ?: return
             if (type == BluetoothHidDevice.REPORT_TYPE_INPUT) {
-                val size = if (id.toInt() == ID_KBD) 8 else 4
+                val size = when (id.toInt()) { ID_KBD -> 8; ID_PAD -> 9; else -> 4 }
                 try { h.replyReport(device, type, id, ByteArray(size)) } catch (e: Exception) { }
             } else {
                 try { h.reportError(device, BluetoothHidDevice.ERROR_RSP_UNSUPPORTED_REQ) } catch (e: Exception) { }
@@ -253,6 +265,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
         mods = 0; buttons = 0; keys.fill(0)
         sendKbd()
         sendMouse(0, 0, 0)
+        sendPad(0, 8, 128, 128, 128, 128, 0, 0)
     }
 
     // ---------- command protocol ----------
@@ -277,6 +290,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             "U" -> setButton(arg.trim(), false)
             "C" -> { setButton(arg.trim(), true); setButton(arg.trim(), false) }
             "T" -> typeText(arg)
+            "G" -> pad(arg)
             "X" -> for (h in arg.trim().split(Regex("\\s+"))) altHex(h)
             "K" -> {
                 val s2 = arg.indexOf(' ')
@@ -284,6 +298,26 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             }
             "R" -> releaseAllNow()
         }
+    }
+
+    /** G <buttons> <hat 0-7, 8 = none> <lx> <ly> <rx> <ry> <lt> <rt>  (sticks and triggers 0..255, stick centre 128) */
+    private fun pad(arg: String) {
+        val p = arg.trim().split(Regex("\\s+")).map { it.toInt() }
+        if (p.size < 8) return
+        sendPad(p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7])
+    }
+
+    private fun sendPad(buttons: Int, hat: Int, lx: Int, ly: Int, rx: Int, ry: Int, lt: Int, rt: Int) {
+        report(
+            ID_PAD,
+            byteArrayOf(
+                (buttons and 0xFF).toByte(), ((buttons shr 8) and 0xFF).toByte(),
+                (hat and 0x0F).toByte(),
+                lx.coerceIn(0, 255).toByte(), ly.coerceIn(0, 255).toByte(),
+                rx.coerceIn(0, 255).toByte(), ry.coerceIn(0, 255).toByte(),
+                lt.coerceIn(0, 255).toByte(), rt.coerceIn(0, 255).toByte()
+            )
+        )
     }
 
     private fun move(dx0: Int, dy0: Int) {
