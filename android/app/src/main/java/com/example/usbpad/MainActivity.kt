@@ -1,7 +1,12 @@
 package com.example.usbpad
 
 import android.app.Activity
+import android.app.AlertDialog
+import android.bluetooth.BluetoothAdapter
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Bundle
@@ -19,6 +24,7 @@ import android.widget.TextView
 class MainActivity : Activity() {
     private lateinit var link: HidLink
     private var adbLink: Link? = null
+    private var btLink: BtLink? = null
     private var mode = "hid"
     private lateinit var prefs: SharedPreferences
     private lateinit var modeBtn: Button
@@ -120,7 +126,11 @@ class MainActivity : Activity() {
     }
 
     private fun sendCmd(line: String) {
-        if (mode != "hid") adbLink?.send(line) else link.send(line)
+        when (mode) {
+            "hid" -> link.send(line)
+            "bt" -> btLink?.send(line)
+            else -> adbLink?.send(line)
+        }
     }
 
     private fun showAdbStatus(ok: Boolean) {
@@ -130,21 +140,97 @@ class MainActivity : Activity() {
         status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
     }
 
+    private fun btSupported() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P
+
+    private fun btPermissions(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+            arrayOf("android.permission.BLUETOOTH_CONNECT", "android.permission.BLUETOOTH_SCAN", "android.permission.BLUETOOTH_ADVERTISE")
+        else emptyArray()
+
+    private fun btGranted() = btPermissions().all { checkSelfPermission(it) == PackageManager.PERMISSION_GRANTED }
+
+    private fun showBtStatus(text: String, ok: Boolean) {
+        status.text = text
+        status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
+    }
+
+    /** Creates BtLink and registers the HID profile (needs the Bluetooth permissions first). */
+    private fun startBt() {
+        if (!btSupported()) { showBtStatus("Bluetooth HID needs Android 9+", false); return }
+        if (!btGranted()) {
+            requestPermissions(btPermissions(), 77)
+            showBtStatus("Allow the Bluetooth permission ...", false)
+            return
+        }
+        if (btLink == null) {
+            btLink = BtLink(this) { text, ok -> runOnUiThread { if (mode == "bt") showBtStatus(text, ok) } }
+        }
+        btLink?.start()
+    }
+
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 77 && mode == "bt") {
+            if (btGranted()) startBt() else showBtStatus("Bluetooth permission denied", false)
+        }
+    }
+
+    /** "Pair" button: make the phone discoverable so the PC can find and pair it. */
+    private fun btPair() {
+        if (btLink?.started != true) { startBt(); }
+        try {
+            val i = Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE)
+            i.putExtra(BluetoothAdapter.EXTRA_DISCOVERABLE_DURATION, 300)
+            startActivity(i)
+        } catch (e: Exception) {
+            showBtStatus("Cannot open discoverable dialog: " + e.message, false)
+        }
+    }
+
+    /** "Devices" button: pick an already paired PC and connect to it. */
+    private fun btDevices() {
+        val b = btLink
+        if (b == null || !b.started) { startBt(); return }
+        val list = b.bondedDevices()
+        if (list.isEmpty()) {
+            showBtStatus("No paired devices. Tap Pair, then add the phone from the PC.", false)
+            return
+        }
+        val names = list.map {
+            try { (it.name ?: "?") + "  " + it.address } catch (e: SecurityException) { it.address }
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Connect to")
+            .setItems(names) { _, which -> b.connectTo(list[which]) }
+            .show()
+    }
+
     private fun setMode(m: String) {
         mode = m
         prefs.edit().putString("mode", m).apply()
-        val adb = m != "hid"
+        val adb = m == "usb" || m == "wifi"
+        val bt = m == "bt"
         modeBtn.text = when (m) {
             "usb" -> "Mode: ADB (USB)"
             "wifi" -> "Mode: ADB (Wi-Fi)"
+            "bt" -> "Mode: Bluetooth"
             else -> "Mode: HID (root)"
         }
+        onBtn.text = if (bt) "Pair" else "HID ON"
+        offBtn.text = if (bt) "Devices" else "HID OFF"
         onBtn.visibility = if (adb) View.GONE else View.VISIBLE
         offBtn.visibility = if (adb) View.GONE else View.VISIBLE
-        if (adb) {
+        if (!bt) { btLink?.stop(); btLink = null }
+        if (bt) {
             link.stop()
             adbLink?.stop()
-            val l = Link { ok -> runOnUiThread { if (mode != "hid") showAdbStatus(ok) } }
+            adbLink = null
+            showBtStatus("○ Starting Bluetooth ...", false)
+            startBt()
+        } else if (adb) {
+            link.stop()
+            adbLink?.stop()
+            val l = Link { ok -> runOnUiThread { if (mode == "usb" || mode == "wifi") showAdbStatus(ok) } }
             adbLink = l
             l.start()
             showAdbStatus(false)
@@ -208,6 +294,7 @@ class MainActivity : Activity() {
         prefs = getSharedPreferences("usbpad", Context.MODE_PRIVATE)
         mode = prefs.getString("mode", "hid") ?: "hid"
         if (mode == "adb") mode = "usb"
+        if (mode == "bt" && !btSupported()) mode = "hid"
 
         status = TextView(this)
         status.textSize = 12f
@@ -222,12 +309,19 @@ class MainActivity : Activity() {
 
         onBtn = styled(Button(this))
         modeBtn = styled(Button(this))
-        modeBtn.setOnClickListener { setMode(when (mode) { "hid" -> "usb"; "usb" -> "wifi"; else -> "hid" }) }
+        modeBtn.setOnClickListener {
+            setMode(when (mode) {
+                "hid" -> "usb"
+                "usb" -> "wifi"
+                "wifi" -> if (btSupported()) "bt" else "hid"
+                else -> "hid"
+            })
+        }
         onBtn.text = "HID ON"
-        onBtn.setOnClickListener { runSetup("on") }
+        onBtn.setOnClickListener { if (mode == "bt") btPair() else runSetup("on") }
         offBtn = styled(Button(this))
         offBtn.text = "HID OFF"
-        offBtn.setOnClickListener { runSetup("off") }
+        offBtn.setOnClickListener { if (mode == "bt") btDevices() else runSetup("off") }
 
         val kbBtn = styled(Button(this))
         kbBtn.text = "⌨ Keyboard"
@@ -268,5 +362,6 @@ class MainActivity : Activity() {
         super.onDestroy()
         link.stop()
         adbLink?.stop()
+        btLink?.stop()
     }
 }
