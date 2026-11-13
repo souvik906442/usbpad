@@ -142,6 +142,9 @@ public class HidHelper {
             case "U": setButton(arg.trim(), false); break;
             case "C": setButton(arg.trim(), true); setButton(arg.trim(), false); break;
             case "T": typeText(arg); break;
+            case "X":
+                for (String h : arg.trim().split("\\s+")) altHex(h);
+                break;
             case "K": {
                 int s2 = arg.indexOf(' ');
                 keyAction(arg.substring(0, s2), arg.substring(s2 + 1).trim());
@@ -228,6 +231,27 @@ public class HidHelper {
             if (u < 0) continue;
             tap(u & 0xFF, (u & 0x100) != 0);
         }
+    }
+
+    private static int hexUsage(char c) {
+        if (c >= '1' && c <= '9') return 30 + (c - '1');
+        if (c == '0') return 39;
+        if (c >= 'a' && c <= 'f') return 4 + (c - 'a');
+        return 0;
+    }
+
+    /** One Unicode char via Windows hex Alt code (needs EnableHexNumpad=1 on the PC). */
+    private static void altHex(String hex) {
+        if (hex.isEmpty()) return;
+        int saved = mods;
+        mods = saved | 4; sendKbd(false);
+        addKey(0x57); sendKbd(false); removeKey(0x57); sendKbd(false);
+        for (char ch : hex.toLowerCase().toCharArray()) {
+            int u = hexUsage(ch);
+            if (u == 0) continue;
+            addKey(u); sendKbd(false); removeKey(u); sendKbd(false);
+        }
+        mods = saved; sendKbd(true);
     }
 
     private static int modBit(String n) {

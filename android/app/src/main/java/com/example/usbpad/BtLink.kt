@@ -277,6 +277,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             "U" -> setButton(arg.trim(), false)
             "C" -> { setButton(arg.trim(), true); setButton(arg.trim(), false) }
             "T" -> typeText(arg)
+            "X" -> for (h in arg.trim().split(Regex("\\s+"))) altHex(h)
             "K" -> {
                 val s2 = arg.indexOf(' ')
                 keyAction(arg.substring(0, s2), arg.substring(s2 + 1).trim())
@@ -351,6 +352,30 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             if (u < 0) continue
             tap(u and 0xFF, (u and 0x100) != 0)
         }
+    }
+
+    private fun hexUsage(c: Char): Int = when (c) {
+        in '1'..'9' -> 30 + (c - '1')
+        '0' -> 39
+        in 'a'..'f' -> 4 + (c - 'a')
+        else -> 0
+    }
+
+    /**
+     * Types one Unicode char on Windows with the hex Alt code: hold Alt, keypad +, hex digits, release Alt.
+     * Needs HKCU\Control Panel\Input Method\EnableHexNumpad = "1" on the PC (then sign out/in).
+     */
+    private fun altHex(hex: String) {
+        if (hex.isEmpty()) return
+        val saved = mods
+        mods = saved or 4; sendKbd()
+        addKey(0x57); sendKbd(); removeKey(0x57); sendKbd()
+        for (ch in hex.lowercase()) {
+            val u = hexUsage(ch)
+            if (u == 0) continue
+            addKey(u); sendKbd(); removeKey(u); sendKbd()
+        }
+        mods = saved; sendKbd()
     }
 
     private fun modBit(n: String) = when (n) { "ctrl" -> 1; "shift" -> 2; "alt" -> 4; "win" -> 8; else -> 0 }

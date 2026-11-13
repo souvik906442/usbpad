@@ -19,23 +19,54 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
 
     override fun onCheckIsTextEditor(): Boolean = true
 
-    private fun typeText(t: String) {
+    /** true: Bengali etc. is sent with Alt+hex codes (PC needs EnableHexNumpad); false: InScript keys. */
+    var bnHex = true
+    /** true (ADB mode): the PC server types real Unicode, so send the text untouched. */
+    var native = false
+
+    // How many key presses the current composing text produced (Bengali -> InScript keys).
+    private var composingKeys = 0
+
+    /** Sends the text (Bengali mapped to InScript keys); returns how many key presses it took. */
+    private fun typeText(t: String): Int {
+        var n = 0
         val parts = t.replace("\r", "").split("\n")
         parts.forEachIndexed { i, p ->
-            if (i > 0) send("K tap enter")
-            if (p.isNotEmpty()) send("T $p")
+            if (i > 0) { send("K tap enter"); n++ }
+            if (p.isEmpty()) return@forEachIndexed
+            if (native) {
+                send("T $p")
+                n += p.length
+            } else if (bnHex) {
+                val ascii = StringBuilder()
+                for (c in p) {
+                    if (c.code < 128) {
+                        ascii.append(c)
+                    } else if (!Character.isSurrogate(c)) {
+                        if (ascii.isNotEmpty()) { send("T $ascii"); n += ascii.length; ascii.setLength(0) }
+                        send("X " + Integer.toHexString(c.code))
+                        n++
+                    }
+                }
+                if (ascii.isNotEmpty()) { send("T $ascii"); n += ascii.length }
+            } else {
+                val keys = BengaliInscript.toKeys(p)
+                send("T $keys")
+                n += keys.length
+            }
         }
+        return n
     }
 
     private fun replaceComposing(new: String) {
-        repeat(composing.length) { send("K tap backspace") }
-        typeText(new)
+        repeat(composingKeys) { send("K tap backspace") }
+        composingKeys = typeText(new)
         composing = new
     }
 
     override fun onCreateInputConnection(outAttrs: EditorInfo): InputConnection {
+        // Plain text (not password) so Gboard allows other languages, e.g. Bengali via the globe key.
         outAttrs.inputType = InputType.TYPE_CLASS_TEXT or
-            InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
             InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
         outAttrs.imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or
             EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_ACTION_NONE
@@ -47,19 +78,19 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
 
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
                 replaceComposing(text.toString())
-                composing = ""
+                composing = ""; composingKeys = 0
                 return true
             }
 
             override fun finishComposingText(): Boolean {
-                composing = ""
+                composing = ""; composingKeys = 0
                 return true
             }
 
             override fun deleteSurroundingText(beforeLength: Int, afterLength: Int): Boolean {
                 repeat(beforeLength) { send("K tap backspace") }
                 repeat(afterLength) { send("K tap delete") }
-                composing = ""
+                composing = ""; composingKeys = 0
                 return true
             }
         }
@@ -83,14 +114,14 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
             else -> null
         }
         if (name != null) {
-            composing = ""
+            composing = ""; composingKeys = 0
             send("K tap $name")
             return true
         }
         if (keyCode != KeyEvent.KEYCODE_BACK) {
             val u = event.unicodeChar
             if (u > 0 && !event.isCtrlPressed && !event.isAltPressed) {
-                send("T " + String(Character.toChars(u)))
+                typeText(String(Character.toChars(u)))
                 return true
             }
         }

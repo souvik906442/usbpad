@@ -6,7 +6,10 @@ import android.bluetooth.BluetoothAdapter
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.content.SharedPreferences
 import android.graphics.Color
 import android.os.Bundle
@@ -36,6 +39,7 @@ class MainActivity : Activity() {
     private val activeMods = mutableSetOf<String>()
     private val modButtons = mutableMapOf<String, Button>()
     private var kbVisible = false
+    private lateinit var bnBtn: Button
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
@@ -158,14 +162,43 @@ class MainActivity : Activity() {
     private fun startBt() {
         if (!btSupported()) { showBtStatus("Bluetooth HID needs Android 9+", false); return }
         if (!btGranted()) {
-            requestPermissions(btPermissions(), 77)
+            val ask = if (Build.VERSION.SDK_INT >= 33) btPermissions() + "android.permission.POST_NOTIFICATIONS" else btPermissions()
+            requestPermissions(ask, 77)
             showBtStatus("Allow the Bluetooth permission ...", false)
             return
         }
-        if (btLink == null) {
-            btLink = BtLink(this) { text, ok -> runOnUiThread { if (mode == "bt") showBtStatus(text, ok) } }
+        val b = BtHolder.get(this)
+        btLink = b
+        BtHolder.listener = { text, ok -> runOnUiThread { if (mode == "bt") showBtStatus(text, ok) } }
+        try { startForegroundService(Intent(this, BtService::class.java)) } catch (e: Exception) { }
+        askBatteryExemption()
+        if (b.started) {
+            if (BtHolder.lastText.isNotEmpty()) showBtStatus(BtHolder.lastText, BtHolder.lastOk)
+        } else {
+            b.start()
         }
-        btLink?.start()
+    }
+
+    /** Once: ask Android not to kill the app in the background (Settings > Battery > Unrestricted). */
+    private fun askBatteryExemption() {
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+            if (pm.isIgnoringBatteryOptimizations(packageName)) return
+            if (prefs.getBoolean("asked_battery", false)) return
+            prefs.edit().putBoolean("asked_battery", true).apply()
+            startActivity(
+                Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                    .setData(Uri.parse("package:$packageName"))
+            )
+        } catch (e: Exception) { }
+    }
+
+    private fun stopBt() {
+        BtHolder.listener = null
+        btLink = null
+        try {
+            startService(Intent(this, BtService::class.java).setAction(BtService.ACTION_STOP))
+        } catch (e: Exception) { BtHolder.stop() }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
@@ -209,6 +242,8 @@ class MainActivity : Activity() {
         mode = m
         prefs.edit().putString("mode", m).apply()
         val adb = m == "usb" || m == "wifi"
+        keyView.native = adb
+        updateBnBtn()
         val bt = m == "bt"
         modeBtn.text = when (m) {
             "usb" -> "Mode: ADB (USB)"
@@ -220,7 +255,7 @@ class MainActivity : Activity() {
         offBtn.text = if (bt) "Devices" else "HID OFF"
         onBtn.visibility = if (adb) View.GONE else View.VISIBLE
         offBtn.visibility = if (adb) View.GONE else View.VISIBLE
-        if (!bt) { btLink?.stop(); btLink = null }
+        if (!bt && (btLink != null || BtHolder.link != null)) stopBt()
         if (bt) {
             link.stop()
             adbLink?.stop()
@@ -291,6 +326,13 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        // Show the touchpad even over the lock screen, so Bluetooth keeps working while locked.
+        if (Build.VERSION.SDK_INT >= 27) {
+            setShowWhenLocked(true)
+        } else {
+            @Suppress("DEPRECATION")
+            window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED)
+        }
         prefs = getSharedPreferences("usbpad", Context.MODE_PRIVATE)
         mode = prefs.getString("mode", "hid") ?: "hid"
         if (mode == "adb") mode = "usb"
@@ -306,6 +348,13 @@ class MainActivity : Activity() {
 
         val pad = TouchpadView(this) { sendCmd(it) }
         keyView = KeyCaptureView(this) { sendCmd(it) }
+        keyView.bnHex = prefs.getBoolean("bn_hex", true)
+        bnBtn = styled(Button(this))
+        bnBtn.setOnClickListener {
+            keyView.bnHex = !keyView.bnHex
+            prefs.edit().putBoolean("bn_hex", keyView.bnHex).apply()
+            updateBnBtn()
+        }
 
         onBtn = styled(Button(this))
         modeBtn = styled(Button(this))
@@ -345,12 +394,16 @@ class MainActivity : Activity() {
         root.addView(row(44, modeBtn, onBtn, offBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
-        root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win")))
+        root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), bnBtn))
         root.addView(row(48, keyButton("Esc", "esc"), keyButton("Tab", "tab"), keyButton("Del", "delete", true), keyButton("⌫", "backspace", true), keyButton("Enter", "enter")))
         root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true)))
         root.addView(keyView, LinearLayout.LayoutParams(1, 1))
         setContentView(root)
         setMode(mode)
+    }
+
+    private fun updateBnBtn() {
+        bnBtn.text = if (keyView.native) "Bn: Unicode" else if (keyView.bnHex) "Bn: Alt-hex" else "Bn: InScript"
     }
 
     override fun onPause() {
@@ -362,6 +415,7 @@ class MainActivity : Activity() {
         super.onDestroy()
         link.stop()
         adbLink?.stop()
-        btLink?.stop()
+        // Bluetooth keeps running in BtService; just stop updating this (dying) activity.
+        BtHolder.listener = null
     }
 }
