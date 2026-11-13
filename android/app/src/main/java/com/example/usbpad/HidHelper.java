@@ -234,8 +234,8 @@ public class HidHelper {
     }
 
     private static int hexUsage(char c) {
-        if (c >= '1' && c <= '9') return 30 + (c - '1');
-        if (c == '0') return 39;
+        if (c >= '1' && c <= '9') return 89 + (c - '1'); // keypad 1..9 (NumLock must be ON)
+        if (c == '0') return 98;                           // keypad 0
         if (c >= 'a' && c <= 'f') return 4 + (c - 'a');
         return 0;
     }

@@ -355,8 +355,8 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
     }
 
     private fun hexUsage(c: Char): Int = when (c) {
-        in '1'..'9' -> 30 + (c - '1')
-        '0' -> 39
+        in '1'..'9' -> 89 + (c - '1')   // keypad 1..9 (NumLock must be ON)
+        '0' -> 98                        // keypad 0
         in 'a'..'f' -> 4 + (c - 'a')
         else -> 0
     }

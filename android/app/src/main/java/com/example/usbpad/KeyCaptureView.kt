@@ -19,10 +19,17 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
 
     override fun onCheckIsTextEditor(): Boolean = true
 
-    /** true: Bengali etc. is sent with Alt+hex codes (PC needs EnableHexNumpad); false: InScript keys. */
-    var bnHex = true
+    /** 0 = Off (live typing, non-ASCII dropped), 1 = Alt+hex Unicode codes (PC needs EnableHexNumpad), 2 = InScript keys. */
+    var bnMode = 1
     /** true (ADB mode): the PC server types real Unicode, so send the text untouched. */
     var native = false
+
+    /**
+     * Gboard's Bengali transliteration ("ami" -> আমি) keeps the Latin letters as composing text and only
+     * commits the Bengali word on space. So in Bengali modes we buffer composing text and send it on commit,
+     * instead of typing the Latin letters on the PC and then correcting them.
+     */
+    private val hold: Boolean get() = native || bnMode != 0
 
     // How many key presses the current composing text produced (Bengali -> InScript keys).
     private var composingKeys = 0
@@ -37,7 +44,7 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
             if (native) {
                 send("T $p")
                 n += p.length
-            } else if (bnHex) {
+            } else if (bnMode == 1) {
                 val ascii = StringBuilder()
                 for (c in p) {
                     if (c.code < 128) {
@@ -49,10 +56,13 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
                     }
                 }
                 if (ascii.isNotEmpty()) { send("T $ascii"); n += ascii.length }
-            } else {
+            } else if (bnMode == 2) {
                 val keys = BengaliInscript.toKeys(p)
                 send("T $keys")
                 n += keys.length
+            } else {
+                send("T $p")
+                n += p.length
             }
         }
         return n
@@ -72,17 +82,19 @@ class KeyCaptureView(ctx: Context, private val send: (String) -> Unit) : View(ct
             EditorInfo.IME_FLAG_NO_FULLSCREEN or EditorInfo.IME_ACTION_NONE
         return object : BaseInputConnection(this, false) {
             override fun setComposingText(text: CharSequence, newCursorPosition: Int): Boolean {
-                replaceComposing(text.toString())
+                if (hold) composing = text.toString() else replaceComposing(text.toString())
                 return true
             }
 
             override fun commitText(text: CharSequence, newCursorPosition: Int): Boolean {
-                replaceComposing(text.toString())
+                if (hold) typeText(text.toString()) else replaceComposing(text.toString())
                 composing = ""; composingKeys = 0
                 return true
             }
 
             override fun finishComposingText(): Boolean {
+                // Keyboard closed / focus moved while a word was still composing: send what we have.
+                if (hold && composing.isNotEmpty()) typeText(composing)
                 composing = ""; composingKeys = 0
                 return true
             }

@@ -348,11 +348,11 @@ class MainActivity : Activity() {
 
         val pad = TouchpadView(this) { sendCmd(it) }
         keyView = KeyCaptureView(this) { sendCmd(it) }
-        keyView.bnHex = prefs.getBoolean("bn_hex", true)
+        keyView.bnMode = prefs.getInt("bn_mode", 1)
         bnBtn = styled(Button(this))
         bnBtn.setOnClickListener {
-            keyView.bnHex = !keyView.bnHex
-            prefs.edit().putBoolean("bn_hex", keyView.bnHex).apply()
+            keyView.bnMode = (keyView.bnMode + 1) % 3
+            prefs.edit().putInt("bn_mode", keyView.bnMode).apply()
             updateBnBtn()
         }
 
@@ -403,7 +403,12 @@ class MainActivity : Activity() {
     }
 
     private fun updateBnBtn() {
-        bnBtn.text = if (keyView.native) "Bn: Unicode" else if (keyView.bnHex) "Bn: Alt-hex" else "Bn: InScript"
+        bnBtn.text = when {
+            keyView.native -> "Bn: Unicode"
+            keyView.bnMode == 1 -> "Bn: Alt-hex"
+            keyView.bnMode == 2 -> "Bn: InScript"
+            else -> "Bn: Off"
+        }
     }
 
     override fun onPause() {
