@@ -171,6 +171,12 @@ def handle(line):
         mouse(BTN[arg][1])
     elif cmd == "T":
         type_text(arg)
+    elif cmd == "X":
+        for h in arg.split():
+            try:
+                key_unicode(chr(int(h, 16)))
+            except ValueError:
+                pass
     elif cmd == "K":
         action, _, name = arg.partition(" ")
         key_action(action, name)
