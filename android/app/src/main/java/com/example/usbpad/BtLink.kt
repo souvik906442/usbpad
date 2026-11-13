@@ -26,6 +26,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
         private const val ID_KBD = 1
         private const val ID_MOUSE = 2
         private const val ID_PAD = 3
+        private const val ID_CONS = 4
 
         // Report ID 1: keyboard (8 bytes: mods, reserved, 6 keys) + LED output report
         // Report ID 2: mouse (3 buttons, x, y, wheel)
@@ -57,6 +58,12 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             0x05, 0x01, 0x15, 0x00, 0x26, 0xFF, 0x00, 0x35, 0x00, 0x45, 0x00, 0x75, 0x08, 0x95, 0x04,
             0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x35, 0x81, 0x02,
             0x95, 0x02, 0x09, 0x33, 0x09, 0x34, 0x81, 0x02,
+            0xC0,
+            // Report ID 4: consumer keys for the other device: bit0 = AC Home, bit1 = AC Back
+            0x05, 0x0C, 0x09, 0x01, 0xA1, 0x01, 0x85, ID_CONS,
+            0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x02,
+            0x0A, 0x23, 0x02, 0x0A, 0x24, 0x02, 0x81, 0x02,
+            0x95, 0x06, 0x81, 0x03,
             0xC0
         ).map { it.toByte() }.toByteArray()
 
@@ -212,7 +219,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
         override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
             val h = hid ?: return
             if (type == BluetoothHidDevice.REPORT_TYPE_INPUT) {
-                val size = when (id.toInt()) { ID_KBD -> 8; ID_PAD -> 9; else -> 4 }
+                val size = when (id.toInt()) { ID_KBD -> 8; ID_PAD -> 9; ID_CONS -> 1; else -> 4 }
                 try { h.replyReport(device, type, id, ByteArray(size)) } catch (e: Exception) { }
             } else {
                 try { h.reportError(device, BluetoothHidDevice.ERROR_RSP_UNSUPPORTED_REQ) } catch (e: Exception) { }
@@ -266,6 +273,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
         sendKbd()
         sendMouse(0, 0, 0)
         sendPad(0, 8, 128, 128, 128, 128, 0, 0)
+        report(ID_CONS, byteArrayOf(0))
     }
 
     // ---------- command protocol ----------
@@ -291,6 +299,7 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             "C" -> { setButton(arg.trim(), true); setButton(arg.trim(), false) }
             "T" -> typeText(arg)
             "G" -> pad(arg)
+            "N" -> nav(arg.trim())
             "X" -> for (h in arg.trim().split(Regex("\\s+"))) altHex(h)
             "K" -> {
                 val s2 = arg.indexOf(' ')
@@ -298,6 +307,31 @@ class BtLink(private val ctx: Context, private val onStatus: (String, Boolean) -
             }
             "R" -> releaseAllNow()
         }
+    }
+
+    /**
+     * N home|back|recents : navigate the OTHER device (e.g. an Android phone/tablet).
+     * home/back = consumer keys AC Home / AC Back; recents = Alt+Tab (Android's keyboard shortcut for recent apps).
+     */
+    private fun nav(name: String) {
+        when (name) {
+            "home" -> consumerTap(1)
+            "back" -> consumerTap(2)
+            "recents" -> {
+                mods = mods or 4; sendKbd()
+                Thread.sleep(30)
+                addKey(43); sendKbd()
+                Thread.sleep(30)
+                removeKey(43); sendKbd()
+                mods = mods and 4.inv(); sendKbd()
+            }
+        }
+    }
+
+    private fun consumerTap(bit: Int) {
+        report(ID_CONS, byteArrayOf(bit.toByte()))
+        Thread.sleep(40)
+        report(ID_CONS, byteArrayOf(0))
     }
 
     /** G <buttons> <hat 0-7, 8 = none> <lx> <ly> <rx> <ry> <lt> <rt>  (sticks and triggers 0..255, stick centre 128) */

@@ -138,6 +138,20 @@ class MainActivity : Activity() {
         }
     }
 
+    /** Back / Home / Recents of the OTHER device (the PC / phone this one is connected to). */
+    private fun nav(name: String) {
+        if (mode == "bt") {
+            sendCmd("N $name")
+            return
+        }
+        // USB / ADB modes: ordinary keyboard shortcuts
+        when (name) {
+            "back" -> { sendCmd("K down alt"); sendCmd("K tap left"); sendCmd("K up alt") }
+            "home" -> sendCmd("K tap win")
+            else -> { sendCmd("K down win"); sendCmd("K tap tab"); sendCmd("K up win") }
+        }
+    }
+
     private fun showAdbStatus(ok: Boolean) {
         val how = if (mode == "wifi") "Wireless debugging, run: python server.py wifi"
                   else "USB debugging, run: python server.py usb"
@@ -397,13 +411,6 @@ class MainActivity : Activity() {
             else Toast.makeText(this, "Gamepad works in Mode: Bluetooth", Toast.LENGTH_SHORT).show()
         }
 
-        val navModeBtn = styled(Button(this))
-        navModeBtn.text = Nav.label(this)
-        navModeBtn.setOnClickListener {
-            Nav.cycle(this)
-            navModeBtn.text = Nav.label(this)
-        }
-
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
         root.setBackgroundColor(0xFF111111.toInt())
@@ -411,8 +418,8 @@ class MainActivity : Activity() {
 
         root.addView(status)
         root.addView(row(44, modeBtn, onBtn, offBtn))
-        root.addView(row(40, navBtn("◀ Back") { Nav.back(this) }, navBtn("● Home") { Nav.home(this) },
-            navBtn("▣ Recents") { Nav.recents(this) }, navModeBtn, padBtn))
+        root.addView(row(40, navBtn("◀ Back") { nav("back") }, navBtn("● Home") { nav("home") },
+            navBtn("▣ Recents") { nav("recents") }, padBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), bnBtn))
