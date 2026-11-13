@@ -64,6 +64,7 @@ class GamepadActivity : Activity() {
         }
         add(bar("Close") { finish() }, ViewGroup.LayoutParams.WRAP_CONTENT)
         add(status, 0, 1f)
+        add(bar("⏎ OK") { BtHolder.link?.send("K tap enter") }, ViewGroup.LayoutParams.WRAP_CONTENT)
         add(bar("◀ Back") { BtHolder.link?.send("N back") }, ViewGroup.LayoutParams.WRAP_CONTENT)
         add(bar("● Home") { BtHolder.link?.send("N home") }, ViewGroup.LayoutParams.WRAP_CONTENT)
         add(bar("▣ Recents") { BtHolder.link?.send("N recents") }, ViewGroup.LayoutParams.WRAP_CONTENT)
