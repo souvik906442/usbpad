@@ -21,6 +21,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.view.inputmethod.InputMethodManager
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
@@ -152,9 +153,12 @@ class MainActivity : Activity() {
     }
 
     private fun showAdbStatus(ok: Boolean) {
-        val how = if (mode == "wifi") "Wireless debugging, run: python server.py wifi"
-                  else "USB debugging, run: python server.py usb"
-        status.text = if (ok) "● ADB connected" else "○ waiting for PC ($how)"
+        val how = when (mode) {
+            "lan" -> "tap \"PC IP\" and enter the PIN shown by UsbPadServer on the PC (same Wi-Fi)"
+            "wifi" -> "Wireless debugging, run: python server.py wifi"
+            else -> "USB debugging, run: python server.py usb"
+        }
+        status.text = if (ok) (if (mode == "lan") "● PC connected (Wi-Fi)" else "● ADB connected") else "○ waiting for PC ($how)"
         status.setTextColor(if (ok) 0xFF66BB6A.toInt() else 0xFFBBBBBB.toInt())
     }
 
@@ -255,18 +259,20 @@ class MainActivity : Activity() {
     private fun setMode(m: String) {
         mode = m
         prefs.edit().putString("mode", m).apply()
-        val adb = m == "usb" || m == "wifi"
+        val adb = m == "usb" || m == "wifi" || m == "lan"
+        val lan = m == "lan"
         keyView.native = adb
         val bt = m == "bt"
         modeBtn.text = when (m) {
             "usb" -> "Mode: ADB (USB)"
             "wifi" -> "Mode: ADB (Wi-Fi)"
+            "lan" -> "Mode: Wi-Fi (PC)"
             "bt" -> "Mode: Bluetooth"
             else -> "Mode: HID (root)"
         }
-        onBtn.text = if (bt) "Pair" else "HID ON"
+        onBtn.text = if (bt) "Pair" else if (lan) "PC IP" else "HID ON"
         offBtn.text = if (bt) "Devices" else "HID OFF"
-        onBtn.visibility = if (adb) View.GONE else View.VISIBLE
+        onBtn.visibility = if (adb && !lan) View.GONE else View.VISIBLE
         offBtn.visibility = if (adb) View.GONE else View.VISIBLE
         if (!bt && (btLink != null || BtHolder.link != null)) stopBt()
         if (bt) {
@@ -278,16 +284,59 @@ class MainActivity : Activity() {
         } else if (adb) {
             link.stop()
             adbLink?.stop()
-            val l = Link { ok -> runOnUiThread { if (mode == "usb" || mode == "wifi") showAdbStatus(ok) } }
+            val l = if (lan) {
+                Link(
+                    prefs.getString("lan_ip", "") ?: "", prefs.getString("lan_pin", "") ?: "",
+                    { ip -> prefs.edit().putString("lan_ip", ip).apply() }
+                ) { ok ->
+                    runOnUiThread { if (mode == "lan") showAdbStatus(ok) }
+                }
+            } else {
+                Link { ok -> runOnUiThread { if (mode == "usb" || mode == "wifi") showAdbStatus(ok) } }
+            }
             adbLink = l
-            l.start()
-            showAdbStatus(false)
+            if (lan && (prefs.getString("lan_pin", "").isNullOrEmpty())) {
+                showAdbStatus(false)
+                lanDialog()
+            } else {
+                l.start()
+                showAdbStatus(false)
+            }
         } else {
             adbLink?.stop()
             adbLink = null
             status.text = "○ HID off. Tap HID ON, then plug the cable into the PC."
             status.setTextColor(0xFFBBBBBB.toInt())
         }
+    }
+
+    /** Wi-Fi (PC) mode: ask for the PC's IP and the 6-digit PIN that UsbPadServer shows in its tray menu. */
+    private fun lanDialog() {
+        fun field(hint: String, value: String, number: Boolean): EditText {
+            val e = EditText(this)
+            e.hint = hint
+            e.setText(value)
+            e.setSingleLine()
+            if (number) e.inputType = android.text.InputType.TYPE_CLASS_PHONE
+            return e
+        }
+        val ip = field("PC IP (optional, found automatically)", prefs.getString("lan_ip", "") ?: "", true)
+        val pin = field("PIN (6 digits)", prefs.getString("lan_pin", "") ?: "", true)
+        val box = LinearLayout(this)
+        box.orientation = LinearLayout.VERTICAL
+        box.setPadding(dp(20), dp(8), dp(20), 0)
+        box.addView(ip)
+        box.addView(pin)
+        AlertDialog.Builder(this)
+            .setTitle("PC on the same Wi-Fi")
+            .setView(box)
+            .setPositiveButton("Connect") { _, _ ->
+                prefs.edit().putString("lan_ip", ip.text.toString().trim())
+                    .putString("lan_pin", pin.text.toString().trim()).apply()
+                if (mode == "lan") setMode("lan")
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     private fun releaseAll() {
@@ -368,12 +417,19 @@ class MainActivity : Activity() {
             setMode(when (mode) {
                 "hid" -> "usb"
                 "usb" -> "wifi"
-                "wifi" -> if (btSupported()) "bt" else "hid"
+                "wifi" -> "lan"
+                "lan" -> if (btSupported()) "bt" else "hid"
                 else -> "hid"
             })
         }
         onBtn.text = "HID ON"
-        onBtn.setOnClickListener { if (mode == "bt") btPair() else runSetup("on") }
+        onBtn.setOnClickListener {
+            when (mode) {
+                "bt" -> btPair()
+                "lan" -> lanDialog()
+                else -> runSetup("on")
+            }
+        }
         offBtn = styled(Button(this))
         offBtn.text = "HID OFF"
         offBtn.setOnClickListener { if (mode == "bt") btDevices() else runSetup("off") }
