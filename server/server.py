@@ -3,9 +3,13 @@ Run:  python server.py [usb|wifi|auto]   (run as Administrator to also control e
       usb  = use the phone on the USB cable (adb -d)
       wifi = use the phone connected over Wireless debugging (adb -s <ip:port>)
       auto = plain adb (default; fine when only one device is attached)
-Needs: Python 3, adb (platform-tools) in PATH, USB debugging ON on the phone.
+      lan  = no adb at all: phone connects over the same Wi-Fi/hotspot to this PC's IP + a PIN
+Needs: Python 3, adb (platform-tools) in PATH, USB debugging ON on the phone (not needed for lan).
 """
 import ctypes
+import hmac
+import os
+import random
 import socket
 import struct
 import subprocess
@@ -17,6 +21,43 @@ from ctypes import wintypes
 # Not 5555: adb itself probes 127.0.0.1:5555 for emulators and would hit this server.
 PORT = 38555
 MODE = sys.argv[1].lower() if len(sys.argv) > 1 else "auto"
+PIN_FILE = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")), "UsbPad", "pin.txt")
+_fail_lock = threading.Lock()
+
+
+def load_pin():
+    """6-digit PIN kept in %APPDATA%\\UsbPad\\pin.txt (created on first run). LAN mode needs it."""
+    try:
+        with open(PIN_FILE, encoding="ascii") as f:
+            p = f.read().strip()
+        if p.isdigit() and len(p) == 6:
+            return p
+    except OSError:
+        pass
+    p = "%06d" % random.SystemRandom().randrange(1000000)
+    os.makedirs(os.path.dirname(PIN_FILE), exist_ok=True)
+    with open(PIN_FILE, "w", encoding="ascii") as f:
+        f.write(p)
+    return p
+
+
+def local_ips():
+    ips = set()
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ip = info[4][0]
+            if not ip.startswith("127."):
+                ips.add(ip)
+    except OSError:
+        pass
+    try:  # the address used for the default route
+        t = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        t.connect(("10.255.255.255", 1))
+        ips.add(t.getsockname()[0])
+        t.close()
+    except OSError:
+        pass
+    return sorted(ips)
 
 if sys.platform != "win32":
     sys.exit("This server only runs on Windows.")
@@ -193,13 +234,22 @@ def pinger(conn, stop):
         stop.wait(1)
 
 
-def client(conn):
+def client(conn, pin=None):
     stop = threading.Event()
     print("phone connected")
     try:
-        conn.sendall(b"HELLO\n")
-        threading.Thread(target=pinger, args=(conn, stop), daemon=True).start()
         with conn.makefile("r", encoding="utf-8", errors="replace", newline="\n") as f:
+            if pin is not None:
+                conn.settimeout(5)
+                first = f.readline().rstrip("\r\n")
+                if not hmac.compare_digest(first.encode(), ("AUTH " + pin).encode()):
+                    print("rejected: wrong PIN")
+                    with _fail_lock:
+                        time.sleep(1)  # slows down PIN guessing
+                    return
+                conn.settimeout(None)
+            conn.sendall(b"HELLO\n")
+            threading.Thread(target=pinger, args=(conn, stop), daemon=True).start()
             for raw in f:
                 try:
                     handle(raw.rstrip("\r\n"))
@@ -257,17 +307,44 @@ def adb_loop():
         time.sleep(3)
 
 
-def main():
+DISCOVERY_PORT = 38556
+
+
+def discovery_loop():
+    """Answers the phone's broadcast "USBPAD?" so it can find this PC even after the router changes its IP."""
+    u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    u.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    u.bind(("0.0.0.0", DISCOVERY_PORT))
+    while True:
+        try:
+            data, addr = u.recvfrom(64)
+            if data.strip() == b"USBPAD?":
+                u.sendto(b"USBPAD!", addr)
+        except OSError:
+            time.sleep(1)
+
+
+def serve(lan=False):
     srv = socket.socket()
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    srv.bind(("127.0.0.1", PORT))  # localhost only
+    srv.bind(("0.0.0.0" if lan else "127.0.0.1", PORT))  # lan: reachable on the Wi-Fi, PIN required
     srv.listen(2)
-    threading.Thread(target=adb_loop, daemon=True).start()
-    print("UsbPad server on 127.0.0.1:%d (mode: %s) - connect phone (USB or Wireless debugging), open the app." % (PORT, MODE))
+    pin = load_pin() if lan else None
+    if lan:
+        threading.Thread(target=discovery_loop, daemon=True).start()
+        print("UsbPad LAN server on port %d. In the phone app choose Mode: Wi-Fi (PC), IP = %s, PIN = %s"
+              % (PORT, " or ".join(local_ips()) or "?", pin))
+    else:
+        threading.Thread(target=adb_loop, daemon=True).start()
+        print("UsbPad server on 127.0.0.1:%d (mode: %s) - connect phone (USB or Wireless debugging), open the app." % (PORT, MODE))
     while True:
         conn, _ = srv.accept()
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-        threading.Thread(target=client, args=(conn,), daemon=True).start()
+        threading.Thread(target=client, args=(conn, pin), daemon=True).start()
+
+
+def main():
+    serve(MODE == "lan")
 
 
 if __name__ == "__main__":
