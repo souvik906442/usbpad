@@ -282,6 +282,8 @@ public class HidHelper {
             case "up": return 82;
             case "capslock": return 57;
             case "numlock": return 83;
+            case "insert": return 73;
+            case "printscreen": return 70;
             default:
                 if (n.length() >= 2 && n.charAt(0) == 'f') {
                     try {

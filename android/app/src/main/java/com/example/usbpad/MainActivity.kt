@@ -450,6 +450,23 @@ class MainActivity : Activity() {
         offBtn.text = "HID OFF"
         offBtn.setOnClickListener { if (mode == "bt") btDevices() else runSetup("off") }
 
+        // Fn panel: F1-F12 and Home / End / PgUp / PgDn / Ins / PrtSc, toggled by the "Fn" button
+        val fnPanel = LinearLayout(this)
+        fnPanel.orientation = LinearLayout.VERTICAL
+        fnPanel.visibility = View.GONE
+        fnPanel.addView(row(40, keyButton("F1", "f1"), keyButton("F2", "f2"), keyButton("F3", "f3"),
+            keyButton("F4", "f4"), keyButton("F5", "f5"), keyButton("F6", "f6")))
+        fnPanel.addView(row(40, keyButton("F7", "f7"), keyButton("F8", "f8"), keyButton("F9", "f9"),
+            keyButton("F10", "f10"), keyButton("F11", "f11"), keyButton("F12", "f12")))
+        fnPanel.addView(row(40, keyButton("Home", "home"), keyButton("End", "end"), keyButton("PgUp", "pgup", true),
+            keyButton("PgDn", "pgdn", true), keyButton("Ins", "insert"), keyButton("PrtSc", "printscreen")))
+        val fnBtn = Button(this).acc(Glass.PURPLE)
+        fnBtn.text = "Fn ▾"
+        fnBtn.setOnClickListener {
+            val show = fnPanel.visibility != View.VISIBLE
+            fnPanel.visibility = if (show) View.VISIBLE else View.GONE
+            fnBtn.text = if (show) "Fn ▴" else "Fn ▾"
+        }
         val kbBtn = Button(this).acc(Glass.ORANGE)
         kbBtn.text = "⌨ Keyboard"
         kbBtn.setOnClickListener {
@@ -488,7 +505,8 @@ class MainActivity : Activity() {
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
             setMargins(dp(3), dp(6), dp(3), dp(6))
         })
-        root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
+        root.addView(fnPanel)
+        root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), fnBtn, kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), keyButton("Caps", "capslock")))
         root.addView(row(48, keyButton("Esc", "esc"), keyButton("Tab", "tab"), keyButton("Del", "delete", true), keyButton("⌫", "backspace", true), keyButton("Enter", "enter")))
         root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true), keyButton("Num", "numlock")))
