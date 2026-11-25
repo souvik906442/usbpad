@@ -47,8 +47,16 @@ class MainActivity : Activity() {
     private fun styled(b: Button, on: Boolean = false): Button {
         b.isAllCaps = false
         b.setTextColor(Color.WHITE)
-        b.setBackgroundColor(if (on) 0xFF2E7D32.toInt() else 0xFF3A3A3A.toInt())
+        b.textSize = 14f
+        b.stateListAnimator = null
+        b.background = Glass.button(this, b.tag as? IntArray, on)
         return b
+    }
+
+    /** Tinted (coloured) glass button. */
+    private fun Button.acc(c: IntArray): Button {
+        tag = c
+        return styled(this)
     }
 
     private fun row(h: Int, vararg views: View): LinearLayout {
@@ -56,7 +64,7 @@ class MainActivity : Activity() {
         r.orientation = LinearLayout.HORIZONTAL
         for (v in views) {
             val lp = LinearLayout.LayoutParams(0, dp(h), 1f)
-            lp.setMargins(dp(2), dp(2), dp(2), dp(2))
+            lp.setMargins(dp(3), dp(3), dp(3), dp(3))
             r.addView(v, lp)
         }
         return r
@@ -402,7 +410,8 @@ class MainActivity : Activity() {
 
         status = TextView(this)
         status.textSize = 12f
-        status.setPadding(dp(4), dp(2), dp(4), dp(6))
+        status.setPadding(dp(12), dp(8), dp(12), dp(8))
+        status.background = Glass.panel(this, 14f)
         status.text = "○ HID off. Tap HID ON, then plug the cable into the PC."
         status.setTextColor(0xFFBBBBBB.toInt())
 
@@ -411,8 +420,8 @@ class MainActivity : Activity() {
         val pad = TouchpadView(this) { sendCmd(it) }
         keyView = KeyCaptureView(this) { sendCmd(it) }
 
-        onBtn = styled(Button(this))
-        modeBtn = styled(Button(this))
+        onBtn = Button(this).acc(Glass.GREEN)
+        modeBtn = Button(this).acc(Glass.BLUE)
         modeBtn.setOnClickListener {
             setMode(when (mode) {
                 "hid" -> "usb"
@@ -430,11 +439,11 @@ class MainActivity : Activity() {
                 else -> runSetup("on")
             }
         }
-        offBtn = styled(Button(this))
+        offBtn = Button(this).acc(Glass.RED)
         offBtn.text = "HID OFF"
         offBtn.setOnClickListener { if (mode == "bt") btDevices() else runSetup("off") }
 
-        val kbBtn = styled(Button(this))
+        val kbBtn = Button(this).acc(Glass.ORANGE)
         kbBtn.text = "⌨ Keyboard"
         kbBtn.setOnClickListener {
             val imm = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
@@ -447,33 +456,39 @@ class MainActivity : Activity() {
             kbVisible = !kbVisible
         }
 
-        fun navBtn(label: String, act: () -> Unit): Button {
-            val b = styled(Button(this))
+        fun navBtn(label: String, color: IntArray = Glass.PURPLE, act: () -> Unit): Button {
+            val b = Button(this).acc(color)
             b.text = label
             b.setOnClickListener { act() }
             return b
         }
-        val padBtn = navBtn("Gamepad") {
+        val padBtn = navBtn("Gamepad", Glass.PINK) {
             if (mode == "bt") startActivity(Intent(this, GamepadActivity::class.java))
             else Toast.makeText(this, "Gamepad works in Mode: Bluetooth", Toast.LENGTH_SHORT).show()
         }
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(0xFF111111.toInt())
+        root.setBackgroundColor(Color.TRANSPARENT)
         root.setPadding(dp(8), dp(8), dp(8), dp(8))
 
-        root.addView(status)
+        root.addView(status, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+            setMargins(dp(3), 0, dp(3), dp(6))
+        })
         root.addView(row(44, modeBtn, onBtn, offBtn))
         root.addView(row(40, navBtn("◀ Back") { nav("back") }, navBtn("● Home") { nav("home") },
             navBtn("▣ Recents") { nav("recents") }, padBtn))
-        root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
+            setMargins(dp(3), dp(6), dp(3), dp(6))
+        })
         root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), keyButton("Caps", "capslock")))
         root.addView(row(48, keyButton("Esc", "esc"), keyButton("Tab", "tab"), keyButton("Del", "delete", true), keyButton("⌫", "backspace", true), keyButton("Enter", "enter")))
         root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true), keyButton("Num", "numlock")))
         root.addView(keyView, LinearLayout.LayoutParams(1, 1))
-        setContentView(root)
+        window.statusBarColor = 0xFF1A1446.toInt()
+        window.navigationBarColor = 0xFF0B3A8C.toInt()
+        setContentView(Glass.decorate(this, root))
         setMode(mode)
     }
 

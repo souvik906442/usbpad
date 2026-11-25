@@ -1,6 +1,8 @@
 package com.example.usbpad
 
 import android.content.Context
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
@@ -32,8 +34,34 @@ class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx)
     var sensitivity = 1.8f
     var scrollStep = 14f   // pixels of two-finger travel per wheel notch
 
+    private var glowX = 0f
+    private var glowY = 0f
+    private var glowOn = false
+    private val density = ctx.resources.displayMetrics.density
+    private val hint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0x44FFFFFF
+        textAlign = Paint.Align.CENTER
+        isFakeBoldText = true
+    }
+    private val glowFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0x40FFFFFF }
+    private val glowRing = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xAAFFFFFF.toInt()
+        style = Paint.Style.STROKE
+        strokeWidth = 2f * density
+    }
+
     init {
-        setBackgroundColor(0xFF262626.toInt())
+        background = Glass.panel(ctx, 22f, 0x22FFFFFF, 0x77FFFFFF)
+    }
+
+    override fun onDraw(c: Canvas) {
+        super.onDraw(c)
+        hint.textSize = 16f * density
+        c.drawText("TOUCHPAD", width / 2f, height / 2f, hint)
+        if (glowOn) {
+            c.drawCircle(glowX, glowY, 34f * density, glowFill)
+            c.drawCircle(glowX, glowY, 34f * density, glowRing)
+        }
     }
 
     private fun avgX(e: MotionEvent, skip: Int): Float {
@@ -59,6 +87,9 @@ class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
+        glowOn = e.actionMasked != MotionEvent.ACTION_UP && e.actionMasked != MotionEvent.ACTION_CANCEL
+        if (glowOn) { glowX = e.x; glowY = e.y }
+        invalidate()
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = e.x; downY = e.y

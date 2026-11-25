@@ -2,6 +2,7 @@ package com.example.usbpad
 
 import android.content.Context
 import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.view.HapticFeedbackConstants
@@ -175,29 +176,31 @@ class GamepadView(ctx: Context, private val send: (String) -> Unit) : View(ctx) 
 
     // ---------- drawing ----------
 
+    private val glassStroke = 0xAAFFFFFF.toInt()
+
     private fun drawStick(c: Canvas, cx: Float, cy: Float, dx: Float, dy: Float) {
-        fill.color = 0xFF1F1F21.toInt(); stroke.color = 0xFF3C3C40.toInt()
+        fill.color = 0x26FFFFFF; stroke.color = 0x88FFFFFF.toInt()
         c.drawCircle(cx, cy, stickR, fill)
         c.drawCircle(cx, cy, stickR, stroke)
-        fill.color = 0xFF2E2E31.toInt()
+        fill.color = 0xCC8E7CFF.toInt(); stroke.color = Color.WHITE
         c.drawCircle(cx + dx * 0.55f, cy + dy * 0.55f, 62f, fill)
         c.drawCircle(cx + dx * 0.55f, cy + dy * 0.55f, 62f, stroke)
     }
 
     private fun drawDpad(c: Canvas) {
-        fill.color = 0xFF333336.toInt(); stroke.color = 0xFF1A1A1C.toInt()
+        fill.color = 0x30FFFFFF; stroke.color = glassStroke
         rect.set(dpX - 145f, dpY - 48f, dpX + 145f, dpY + 48f)
         c.drawRoundRect(rect, 22f, 22f, fill); c.drawRoundRect(rect, 22f, 22f, stroke)
         rect.set(dpX - 48f, dpY - 145f, dpX + 48f, dpY + 145f)
         c.drawRoundRect(rect, 22f, 22f, fill); c.drawRoundRect(rect, 22f, 22f, stroke)
-        fill.color = 0xFF5A5A60.toInt()
+        fill.color = 0xCCFFD166.toInt()
         if (hat == 7 || hat == 0 || hat == 1) { rect.set(dpX - 48f, dpY - 145f, dpX + 48f, dpY - 30f); c.drawRoundRect(rect, 22f, 22f, fill) }
         if (hat in 1..3) { rect.set(dpX + 30f, dpY - 48f, dpX + 145f, dpY + 48f); c.drawRoundRect(rect, 22f, 22f, fill) }
         if (hat in 3..5) { rect.set(dpX - 48f, dpY + 30f, dpX + 48f, dpY + 145f); c.drawRoundRect(rect, 22f, 22f, fill) }
         if (hat == 5 || hat == 6 || hat == 7) { rect.set(dpX - 145f, dpY - 48f, dpX - 30f, dpY + 48f); c.drawRoundRect(rect, 22f, 22f, fill) }
-        fill.color = 0xFF222224.toInt()
+        fill.color = 0x40FFFFFF
         c.drawCircle(dpX, dpY, 50f, fill)
-        text.color = 0xFF8A8A90.toInt(); text.textSize = 40f
+        text.color = 0xCCFFFFFF.toInt(); text.textSize = 40f
         c.drawText("▲", dpX, dpY - 82f + 14f, text)
         c.drawText("▼", dpX, dpY + 82f + 14f, text)
         c.drawText("◀", dpX - 92f, dpY + 14f, text)
@@ -205,10 +208,15 @@ class GamepadView(ctx: Context, private val send: (String) -> Unit) : View(ctx) 
     }
 
     private fun drawBtn(c: Canvas, b: Btn, down: Boolean) {
-        fill.color = if (down) 0xFF5A5A60.toInt() else 0xFF333336.toInt()
-        stroke.color = 0xFF1A1A1C.toInt()
-        val big = b.label.length == 1
-        text.color = b.color
+        val face = b.label.length == 1
+        fill.color = if (face) {
+            (b.color and 0xFFFFFF) or (if (down) 0xFF000000.toInt() else 0xAA000000.toInt())
+        } else {
+            if (down) 0x88FFFFFF.toInt() else 0x30FFFFFF
+        }
+        stroke.color = glassStroke
+        text.color = Color.WHITE
+        val big = face
         if (b.round) {
             c.drawCircle(b.x, b.y, b.w, fill)
             c.drawCircle(b.x, b.y, b.w, stroke)
@@ -224,7 +232,7 @@ class GamepadView(ctx: Context, private val send: (String) -> Unit) : View(ctx) 
     }
 
     override fun onDraw(c: Canvas) {
-        c.drawColor(0xFF262628.toInt())
+        // background (gradient + glow) comes from the parent, so the pad itself stays transparent
         c.save()
         c.translate(offX, offY)
         c.scale(sc, sc)

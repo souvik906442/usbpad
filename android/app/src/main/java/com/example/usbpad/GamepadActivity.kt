@@ -19,12 +19,14 @@ class GamepadActivity : Activity() {
 
     private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
 
-    private fun bar(label: String, onClick: () -> Unit): Button {
+    private fun bar(label: String, color: IntArray, onClick: () -> Unit): Button {
         val b = Button(this)
         b.text = label
         b.isAllCaps = false
         b.setTextColor(Color.WHITE)
-        b.setBackgroundColor(0xFF3A3A3A.toInt())
+        b.textSize = 13f
+        b.stateListAnimator = null
+        b.background = Glass.button(this, color, false)
         b.setOnClickListener { onClick() }
         return b
     }
@@ -56,27 +58,29 @@ class GamepadActivity : Activity() {
 
         val top = LinearLayout(this)
         top.orientation = LinearLayout.HORIZONTAL
-        top.setBackgroundColor(0xFF111111.toInt())
+        top.setBackgroundColor(0x33000000)
         fun add(v: View, w: Int, weight: Float = 0f) {
             val lp = LinearLayout.LayoutParams(w, dp(44), weight)
             lp.setMargins(dp(3), dp(3), dp(3), dp(3))
             top.addView(v, lp)
         }
-        add(bar("Close") { finish() }, ViewGroup.LayoutParams.WRAP_CONTENT)
+        add(bar("Close", Glass.RED) { finish() }, ViewGroup.LayoutParams.WRAP_CONTENT)
         add(status, 0, 1f)
-        add(bar("⏎ OK") { BtHolder.link?.send("K tap enter") }, ViewGroup.LayoutParams.WRAP_CONTENT)
-        add(bar("◀ Back") { BtHolder.link?.send("N back") }, ViewGroup.LayoutParams.WRAP_CONTENT)
-        add(bar("● Home") { BtHolder.link?.send("N home") }, ViewGroup.LayoutParams.WRAP_CONTENT)
-        add(bar("▣ Recents") { BtHolder.link?.send("N recents") }, ViewGroup.LayoutParams.WRAP_CONTENT)
+        add(bar("⏎ OK", Glass.GREEN) { BtHolder.link?.send("K tap enter") }, ViewGroup.LayoutParams.WRAP_CONTENT)
+        add(bar("◀ Back", Glass.PURPLE) { BtHolder.link?.send("N back") }, ViewGroup.LayoutParams.WRAP_CONTENT)
+        add(bar("● Home", Glass.BLUE) { BtHolder.link?.send("N home") }, ViewGroup.LayoutParams.WRAP_CONTENT)
+        add(bar("▣ Recents", Glass.ORANGE) { BtHolder.link?.send("N recents") }, ViewGroup.LayoutParams.WRAP_CONTENT)
 
         val pad = GamepadView(this) { line -> BtHolder.link?.send(line) }
 
         val root = LinearLayout(this)
         root.orientation = LinearLayout.VERTICAL
-        root.setBackgroundColor(0xFF262628.toInt())
+        root.setBackgroundColor(Color.TRANSPARENT)
         root.addView(top, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        setContentView(root)
+        window.statusBarColor = 0xFF1A1446.toInt()
+        window.navigationBarColor = 0xFF0B3A8C.toInt()
+        setContentView(Glass.decorate(this, root))
     }
 
     override fun onResume() {
