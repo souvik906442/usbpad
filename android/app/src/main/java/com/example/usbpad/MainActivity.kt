@@ -15,6 +15,7 @@ import android.graphics.Color
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
@@ -47,8 +48,14 @@ class MainActivity : Activity() {
     private fun styled(b: Button, on: Boolean = false): Button {
         b.isAllCaps = false
         b.setTextColor(Color.WHITE)
-        b.textSize = 14f
         b.stateListAnimator = null
+        b.minHeight = 0
+        b.minWidth = 0
+        b.includeFontPadding = false
+        b.setPadding(dp(4), 0, dp(4), 0)
+        b.maxLines = 1
+        // long labels (e.g. "Mode: HID (root)") shrink to fit instead of wrapping and getting cut
+        b.setAutoSizeTextTypeUniformWithConfiguration(9, 14, 1, TypedValue.COMPLEX_UNIT_SP)
         b.background = Glass.button(this, b.tag as? IntArray, on)
         return b
     }
