@@ -96,6 +96,22 @@ class MainActivity : Activity() {
         return b
     }
 
+    private var leftLocked = false
+    private var lockBtn: Button? = null
+
+    /** Tap once = left mouse button stays pressed (drag lock); tap again = released. */
+    private fun lockButton(label: String): Button {
+        val b = styled(Button(this))
+        b.text = label
+        b.setOnClickListener {
+            leftLocked = !leftLocked
+            sendCmd(if (leftLocked) "D L" else "U L")
+            styled(b, leftLocked)
+        }
+        lockBtn = b
+        return b
+    }
+
     private fun keyButton(label: String, name: String, repeat: Boolean = false): Button {
         val b = styled(Button(this))
         b.text = label
@@ -357,6 +373,8 @@ class MainActivity : Activity() {
     private fun releaseAll() {
         sendCmd("R")
         activeMods.clear()
+        leftLocked = false
+        lockBtn?.let { styled(it, false) }
         for ((_, b) in modButtons) styled(b, false)
     }
 
@@ -486,16 +504,6 @@ class MainActivity : Activity() {
             b.setOnClickListener { act() }
             return b
         }
-        val dragBtn = navBtn("Drag: ON", Glass.ORANGE) { }
-        pad.tapDrag = prefs.getBoolean("tap_drag", true)
-        dragBtn.text = if (pad.tapDrag) "Drag: ON" else "Drag: OFF"
-        dragBtn.setOnClickListener {
-            pad.tapDrag = !pad.tapDrag
-            prefs.edit().putBoolean("tap_drag", pad.tapDrag).apply()
-            dragBtn.text = if (pad.tapDrag) "Drag: ON" else "Drag: OFF"
-            Toast.makeText(this, if (pad.tapDrag) "Tap and drag ON: tap, tap, touch+hold, move" else "Tap and drag OFF",
-                Toast.LENGTH_SHORT).show()
-        }
         val padBtn = navBtn("Gamepad", Glass.PINK) {
             if (mode == "bt") startActivity(Intent(this, GamepadActivity::class.java))
             else Toast.makeText(this, "Gamepad works in Mode: Bluetooth", Toast.LENGTH_SHORT).show()
@@ -511,12 +519,12 @@ class MainActivity : Activity() {
         })
         root.addView(row(44, modeBtn, onBtn, offBtn))
         root.addView(row(40, navBtn("◀ Back") { nav("back") }, navBtn("● Home") { nav("home") },
-            navBtn("▣ Recents") { nav("recents") }, padBtn, dragBtn))
+            navBtn("▣ Recents") { nav("recents") }, padBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
             setMargins(dp(3), dp(6), dp(3), dp(6))
         })
         root.addView(fnPanel)
-        root.addView(row(56, holdButton("Left", "L"), holdButton("Middle", "M"), holdButton("Right", "R"), fnBtn, kbBtn))
+        root.addView(row(56, holdButton("Left", "L"), lockButton("L-Lock"), holdButton("Middle", "M"), holdButton("Right", "R"), fnBtn, kbBtn))
         root.addView(row(48, modButton("Ctrl", "ctrl"), modButton("Alt", "alt"), modButton("Shift", "shift"), modButton("Win", "win"), keyButton("Caps", "capslock")))
         root.addView(row(48, keyButton("Esc", "esc"), keyButton("Tab", "tab"), keyButton("Del", "delete", true), keyButton("⌫", "backspace", true), keyButton("Enter", "enter")))
         root.addView(row(48, keyButton("←", "left", true), keyButton("↑", "up", true), keyButton("↓", "down", true), keyButton("→", "right", true), keyButton("Num", "numlock")))
