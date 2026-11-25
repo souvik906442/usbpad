@@ -14,7 +14,7 @@ import kotlin.math.max
  * 1 finger tap   = left click
  * 2 finger tap   = right click
  * 2 finger move  = scroll
- * tap, then touch again quickly and move = drag
+ * tap, tap, then touch a 3rd time quickly, hold and move = drag (can be switched off with [tapDrag])
  */
 class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx) {
     private var lastX = 0f
@@ -32,6 +32,9 @@ class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx)
     private val slop = ViewConfiguration.get(ctx).scaledTouchSlop.toFloat()
 
     var sensitivity = 1.8f
+    /** "Tap and drag to move items": triple-tap (tap, tap, touch+hold) then move. */
+    var tapDrag = true
+    private var tapCount = 0
     var scrollStep = 14f   // pixels of two-finger travel per wheel notch
 
     private var glowX = 0f
@@ -98,8 +101,9 @@ class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx)
                 moved = false
                 maxPointers = 1
                 remX = 0f; remY = 0f; scrollAcc = 0f
-                if (e.eventTime - lastTapUp < 250) {
+                if (tapDrag && tapCount >= 2 && e.eventTime - lastTapUp < 300) {
                     dragging = true
+                    tapCount = 0
                     send("D L")
                 }
             }
@@ -144,6 +148,7 @@ class TouchpadView(ctx: Context, private val send: (String) -> Unit) : View(ctx)
                 } else if (!moved && e.eventTime - downTime < 250) {
                     if (maxPointers == 1) {
                         send("C L")
+                        tapCount = if (e.eventTime - lastTapUp < 300) tapCount + 1 else 1
                         lastTapUp = e.eventTime
                     } else if (maxPointers == 2) {
                         send("C R")

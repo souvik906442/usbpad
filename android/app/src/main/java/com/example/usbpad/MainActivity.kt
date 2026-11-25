@@ -486,6 +486,16 @@ class MainActivity : Activity() {
             b.setOnClickListener { act() }
             return b
         }
+        val dragBtn = navBtn("Drag: ON", Glass.ORANGE) { }
+        pad.tapDrag = prefs.getBoolean("tap_drag", true)
+        dragBtn.text = if (pad.tapDrag) "Drag: ON" else "Drag: OFF"
+        dragBtn.setOnClickListener {
+            pad.tapDrag = !pad.tapDrag
+            prefs.edit().putBoolean("tap_drag", pad.tapDrag).apply()
+            dragBtn.text = if (pad.tapDrag) "Drag: ON" else "Drag: OFF"
+            Toast.makeText(this, if (pad.tapDrag) "Tap and drag ON: tap, tap, touch+hold, move" else "Tap and drag OFF",
+                Toast.LENGTH_SHORT).show()
+        }
         val padBtn = navBtn("Gamepad", Glass.PINK) {
             if (mode == "bt") startActivity(Intent(this, GamepadActivity::class.java))
             else Toast.makeText(this, "Gamepad works in Mode: Bluetooth", Toast.LENGTH_SHORT).show()
@@ -501,7 +511,7 @@ class MainActivity : Activity() {
         })
         root.addView(row(44, modeBtn, onBtn, offBtn))
         root.addView(row(40, navBtn("◀ Back") { nav("back") }, navBtn("● Home") { nav("home") },
-            navBtn("▣ Recents") { nav("recents") }, padBtn))
+            navBtn("▣ Recents") { nav("recents") }, padBtn, dragBtn))
         root.addView(pad, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f).apply {
             setMargins(dp(3), dp(6), dp(3), dp(6))
         })
